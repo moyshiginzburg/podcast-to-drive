@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מדריך פשוט: התקנת מנהל הסכתים</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #4b5563;
+      --brand: #2563eb;
+      --ok: #15803d;
+      --border: #dbe2ea;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, "Noto Sans Hebrew", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+    .hero, .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .hero {
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.9rem; }
+    h2 { margin: 0 0 10px; font-size: 1.3rem; }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+    .step {
+      padding: 16px;
+    }
+    .badge {
+      display: inline-block;
+      background: #e8f0ff;
+      color: #11317a;
+      border: 1px solid #bed2ff;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: .85rem;
+      margin-bottom: 8px;
+    }
+    .shot {
+      margin-top: 10px;
+      border: 1px dashed #94a3b8;
+      border-radius: 12px;
+      background: #f8fafc;
+      padding: 10px;
+      color: #334155;
+      font-size: .95rem;
+    }
+    .btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button, a.btn {
+      appearance: none;
+      border: 1px solid #c9d5ff;
+      background: #eff4ff;
+      color: #102f7a;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: .95rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    button:hover, a.btn:hover { background: #e3edff; }
+    .ok {
+      background: #ecfdf3;
+      border: 1px solid #b8f0ce;
+      color: #14532d;
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    code {
+      background: #f1f5f9;
+      border: 1px solid #dbe2ea;
+      border-radius: 8px;
+      padding: 2px 6px;
+      font-size: .95em;
+    }
+    details {
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>🎙 מדריך פשוט להתקנה</h1>
+      <p>הדף הזה מיועד לאנשים לא טכנולוגיים: צעד־אחר־צעד, בעברית פשוטה, בלי בלבול.</p>
+      <p class="muted">המטרה: להתקין את מנהל ההסכתים בגיליון Google Sheets ולפתוח אותו מתוך התפריט.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card step">
+        <div class="badge">שלב 1</div>
+        <h2>📄 פתחו גיליון חדש</h2>
+        <p>היכנסו ל־Google Drive, צרו <b>Google Sheets</b> חדש.</p>
+        <div class="shot">🖼️ צילום מסך: Google Drive → חדש (+) → Google Sheets</div>
+      </article>
+
+      <article class="card step">
+        <div class="badge">שלב 2</div>
+        <h2>🧩 פתחו את עורך הסקריפט</h2>
+        <p>בתוך הגיליון: <b>Extensions</b> (תוספים) → <b>Apps Script</b>.</p>
+        <div class="shot">🖼️ צילום מסך: התפריט העליון עם Extensions → Apps Script</div>
+      </article>
+
+      <article class="card step">
+        <div class="badge">שלב 3</div>
+        <h2>📋 הדביקו את <code>Code.gs</code></h2>
+        <p>מחקו את הקוד שמופיע כברירת מחדל, והדביקו את תוכן הקובץ <code>Code.gs</code> מהריפו.</p>
+        <div class="btns">
+          <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Code.gs" target="_blank" rel="noreferrer">פתח Code.gs</a>
+        </div>
+        <div class="shot">🖼️ צילום מסך: עורך Apps Script אחרי הדבקה של Code.gs</div>
+      </article>
+
+      <article class="card step">
+        <div class="badge">שלב 4</div>
+        <h2>🖼️ צרו קובץ HTML בשם <code>Sidebar</code></h2>
+        <p>לחצו על <b>+</b> ליד קבצים → <b>HTML</b> → תנו שם: <code>Sidebar</code> (בלי ‎.html).</p>
+        <p>הדביקו שם את תוכן <code>Sidebar.html</code> מהריפו.</p>
+        <div class="btns">
+          <button data-copy="Sidebar">העתק שם קובץ: Sidebar</button>
+          <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Sidebar.html" target="_blank" rel="noreferrer">פתח Sidebar.html</a>
+        </div>
+        <div class="shot">🖼️ צילום מסך: חלון יצירת HTML עם השם Sidebar</div>
+      </article>
+
+      <article class="card step">
+        <div class="badge">שלב 5</div>
+        <h2>✅ שמירה והרשאות</h2>
+        <p>לחצו <b>Save</b>, בחרו פונקציה <code>onOpen</code>, ואז <b>Run</b>. אשרו הרשאות כשתתבקשו.</p>
+        <div class="btns">
+          <button data-copy="onOpen">העתק שם פונקציה: onOpen</button>
+        </div>
+        <div class="shot">🖼️ צילום מסך: בחירת onOpen ולחיצה על Run</div>
+      </article>
+
+      <article class="card step">
+        <div class="badge">שלב 6</div>
+        <h2>🎉 סיימנו</h2>
+        <p>חזרו לגיליון ורעננו את הדף. יופיע תפריט <b>🎙 הסכתים</b> → <b>פתח מנהל הסכתים</b>.</p>
+        <div class="ok">אם התפריט לא מופיע מיד, רענון נוסף בדרך כלל פותר את זה.</div>
+        <div class="shot">🖼️ צילום מסך: תפריט 🎙 הסכתים בגיליון</div>
+      </article>
+    </section>
+
+    <section class="hero" style="margin-top:16px">
+      <h2>❓שאלות נפוצות קצרות</h2>
+      <p><b>צריך לערוך את קובץ המניפסט?</b> בדרך כלל לא. למשתמש רגיל זה מיותר ומבלבל.</p>
+      <p><b>האם הדף הזה משפיע על הסרגל?</b> לא. הסרגל נטען מהקובץ <code>Sidebar</code> בלבד.</p>
+
+      <details>
+        <summary>למפתחים בלבד: פקודות clasp</summary>
+        <div class="btns">
+          <button data-copy="npm install -g @google/clasp">העתק: התקנת clasp</button>
+          <button data-copy="clasp login">העתק: clasp login</button>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <script>
+    function fallbackCopy(text) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+    }
+
+    document.querySelectorAll('button[data-copy]').forEach((btn) => {
+      const original = btn.textContent;
+      btn.addEventListener('click', async () => {
+        const text = btn.getAttribute('data-copy') || '';
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            fallbackCopy(text);
+          }
+          btn.textContent = 'הועתק ✅';
+          setTimeout(() => { btn.textContent = original; }, 1400);
+        } catch (e) {
+          btn.textContent = 'לא הצליח, נסו שוב';
+          setTimeout(() => { btn.textContent = original; }, 1800);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
