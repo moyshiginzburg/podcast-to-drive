@@ -12,6 +12,7 @@ const PROP_LAST_RUN = 'lastRunTime';
 const PROP_RESUME = 'resumeState';
 const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
 const CHUNK_SIZE = 40 * 1024 * 1024; // 40 MB
+const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 
 // ============================================================
 // MENU & SIDEBAR
@@ -269,6 +270,40 @@ function writeLog(podcastTitle, episodeTitle, status, note, link) {
     note || '',
     link || ''
   ]);
+
+  if (link) {
+    const row = sheet.getLastRow();
+    setLogLinkCell(sheet, row, link);
+  }
+}
+
+function isHttpUrl(text) {
+  return /^https?:\/\/\S+$/i.test(String(text || '').trim());
+}
+
+function setLogLinkCell(sheet, row, linkText) {
+  const lines = String(linkText || '')
+    .split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (!lines.length) return;
+
+  const cellText = lines.join('\n');
+  const builder = SpreadsheetApp.newRichTextValue().setText(cellText);
+
+  let cursor = 0;
+  let hasAnyLink = false;
+  lines.forEach(line => {
+    if (isHttpUrl(line)) {
+      builder.setLinkUrl(cursor, cursor + line.length, line);
+      hasAnyLink = true;
+    }
+    cursor += line.length + 1; // include newline
+  });
+
+  if (hasAnyLink) {
+    sheet.getRange(row, 6).setRichTextValue(builder.build());
+  }
 }
 
 // ============================================================
@@ -292,29 +327,140 @@ function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, desc
     return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, contentLength);
   }
 
-  // Unknown size: try direct, fall back to chunked on size error
-  const fileName = buildFileName(episodeTitle, pubDate);
-  try {
-    return [downloadDirect(episodeUrl, fileName, folder, description)];
-  } catch (e) {
-    const msg = (e.message || '').toLowerCase();
-    if (msg.includes('too large') || msg.includes('response too large') || msg.includes('exceeded')) {
-      return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null);
-    }
-    throw e;
+  // Unknown size: prefer chunked to avoid UrlFetch's 50MB direct-response limit.
+  return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null);
+}
+
+function getHeaderCaseInsensitive(headers, key) {
+  const wanted = String(key || '').toLowerCase();
+  const keys = Object.keys(headers || {});
+  for (let i = 0; i < keys.length; i++) {
+    if (String(keys[i]).toLowerCase() === wanted) return headers[keys[i]];
   }
+  return null;
+}
+
+function parseContentLength(headers) {
+  const raw = getHeaderCaseInsensitive(headers, 'Content-Length');
+  if (raw == null) return null;
+  const n = parseInt(String(raw), 10);
+  return isNaN(n) ? null : n;
+}
+
+function parseTotalSizeFromContentRange(headers) {
+  const raw = getHeaderCaseInsensitive(headers, 'Content-Range');
+  if (!raw) return null;
+  const m = String(raw).match(/\/(\d+)\s*$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return isNaN(n) ? null : n;
+}
+
+function ensureFullResponseBytes(resp, context) {
+  const headers = resp.getHeaders() || {};
+  const bytes = resp.getContent();
+  const actualSize = bytes.length;
+  const declaredLength = parseContentLength(headers);
+
+  if (declaredLength !== null && declaredLength > actualSize) {
+    throw new Error(`${context}: השרת דיווח על ${declaredLength} בתים, אבל התקבלו רק ${actualSize} בתים`);
+  }
+  if (actualSize >= URL_FETCH_RESPONSE_LIMIT) {
+    throw new Error(`${context}: התגובה הגיעה למגבלת UrlFetch (50MB)`);
+  }
+  return bytes;
+}
+
+function byteAt(bytes, i) {
+  const v = bytes[i];
+  return v < 0 ? v + 256 : v;
+}
+
+function hasAsciiAt(bytes, offset, text) {
+  if (offset < 0 || offset + text.length > bytes.length) return false;
+  for (let i = 0; i < text.length; i++) {
+    if (byteAt(bytes, offset + i) !== text.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
+function parseSynchsafeInt(bytes, offset) {
+  if (offset < 0 || offset + 4 > bytes.length) return null;
+  const b0 = byteAt(bytes, offset);
+  const b1 = byteAt(bytes, offset + 1);
+  const b2 = byteAt(bytes, offset + 2);
+  const b3 = byteAt(bytes, offset + 3);
+  if ((b0 | b1 | b2 | b3) & 0x80) return null;
+  return (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
+}
+
+/**
+ * MP3 first chunks may carry Xing/Info metadata with total file length.
+ * In split downloads this can make part 001 look as long as the full episode.
+ * Clearing the marker makes players derive duration from the actual part bytes.
+ */
+function normalizeFirstChunkDurationMetadata(bytes) {
+  if (!bytes || bytes.length < 8) return bytes;
+
+  let frameStart = 0;
+  // Skip optional ID3v2 tag
+  if (hasAsciiAt(bytes, 0, 'ID3')) {
+    const tagSize = parseSynchsafeInt(bytes, 6);
+    if (tagSize === null) return bytes;
+    const flags = byteAt(bytes, 5);
+    const hasFooter = (flags & 0x10) !== 0;
+    frameStart = 10 + tagSize + (hasFooter ? 10 : 0);
+  }
+
+  if (frameStart + 4 >= bytes.length) return bytes;
+  const b1 = byteAt(bytes, frameStart);
+  const b2 = byteAt(bytes, frameStart + 1);
+  const b4 = byteAt(bytes, frameStart + 3);
+  if (b1 !== 0xFF || (b2 & 0xE0) !== 0xE0) return bytes;
+
+  const versionBits = (b2 >> 3) & 0x03; // 3=MPEG1, 2=MPEG2, 0=MPEG2.5
+  const layerBits = (b2 >> 1) & 0x03;   // 1=Layer III
+  if (versionBits === 1 || layerBits !== 1) return bytes;
+
+  const hasCrc = (b2 & 0x01) === 0;
+  const channelMode = (b4 >> 6) & 0x03; // 3=mono
+  const sideInfoSize = versionBits === 3
+    ? (channelMode === 3 ? 17 : 32)
+    : (channelMode === 3 ? 9 : 17);
+
+  const xingOffset = frameStart + 4 + (hasCrc ? 2 : 0) + sideInfoSize;
+  const hasXing = hasAsciiAt(bytes, xingOffset, 'Xing') || hasAsciiAt(bytes, xingOffset, 'Info');
+  if (!hasXing) return bytes;
+
+  const normalized = bytes.slice();
+  normalized[xingOffset] = 0;
+  normalized[xingOffset + 1] = 0;
+  normalized[xingOffset + 2] = 0;
+  normalized[xingOffset + 3] = 0;
+  return normalized;
 }
 
 function fetchContentLength(url) {
   try {
-    const resp = UrlFetchApp.fetch(url, {
+    const headResp = UrlFetchApp.fetch(url, {
       method: 'head',
       followRedirects: true,
       muteHttpExceptions: true
     });
-    const h = resp.getHeaders();
-    const cl = h['Content-Length'] || h['content-length'];
-    return cl ? parseInt(cl, 10) : null;
+    const fromHead = parseContentLength(headResp.getHeaders());
+    if (fromHead !== null) return fromHead;
+  } catch (_) { }
+
+  try {
+    const probeResp = UrlFetchApp.fetch(url, {
+      headers: { Range: 'bytes=0-0' },
+      followRedirects: true,
+      muteHttpExceptions: true
+    });
+    const headers = probeResp.getHeaders() || {};
+    const fromRange = parseTotalSizeFromContentRange(headers);
+    if (fromRange !== null) return fromRange;
+    return parseContentLength(headers);
   } catch (_) {
     return null;
   }
@@ -325,7 +471,8 @@ function downloadDirect(url, fileName, folder, description) {
   if (resp.getResponseCode() >= 400) {
     throw new Error(`HTTP ${resp.getResponseCode()} בעת הורדת הפרק`);
   }
-  const blob = resp.getBlob().setName(fileName);
+  const bytes = ensureFullResponseBytes(resp, 'הורדה ישירה נכשלה');
+  const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
   const file = folder.createFile(blob);
   if (description) file.setDescription(description);
   return {
@@ -363,7 +510,8 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       if (part === 1) {
         // We got the whole file in one shot – save it
         const fileName = buildFileName(episodeTitle, pubDate);
-        const blob = resp.getBlob().setName(fileName);
+        const bytes = ensureFullResponseBytes(resp, 'השרת לא תמך ב-Range והחזיר תגובה חלקית');
+        const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
         const file = folder.createFile(blob);
         if (description) file.setDescription(description);
         return [{
@@ -380,7 +528,10 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       throw new Error(`HTTP ${code} בחלק ${part}`);
     }
 
-    const bytes = resp.getContent();
+    let bytes = resp.getContent();
+    if (part === 1) {
+      bytes = normalizeFirstChunkDurationMetadata(bytes);
+    }
     const fileName = buildFileName(episodeTitle, pubDate, part);
     const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
     const file = folder.createFile(blob);
@@ -515,10 +666,13 @@ function downloadEpisode(episodeData) {
   } catch (e) {
     const isDriveFull = (e.message || '').toLowerCase().includes('storage');
     const isRangeUnsupported = (e.message || '').includes('Range requests');
+    const isUrlFetchLimit = (e.message || '').includes('מגבלת UrlFetch');
 
     let userMessage = e.message;
     if (isDriveFull) userMessage = 'Drive מלא – הורדה נכשלה';
-    if (isRangeUnsupported) userMessage = 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך ב-Range requests';
+    if (isRangeUnsupported || isUrlFetchLimit) {
+      userMessage = 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך בחלוקה לחלקים (Range)';
+    }
 
     writeLog(episodeData?.podcastTitle || '', episodeData?.title || '', 'שגיאה', userMessage);
     return { success: false, error: userMessage, driveFull: isDriveFull };
@@ -740,8 +894,8 @@ function podcastManager() {
           driveFull = true;
           break;
         }
-        if (msg.includes('Range requests')) {
-          writeLog(subData.title, ep.title, 'דילוג', 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך ב-Range requests');
+        if (msg.includes('Range requests') || msg.includes('מגבלת UrlFetch')) {
+          writeLog(subData.title, ep.title, 'דילוג', 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך בחלוקה לחלקים (Range)');
           continue;
         }
         writeLog(subData.title, ep.title, 'שגיאה', msg);

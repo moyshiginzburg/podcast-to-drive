@@ -55,55 +55,103 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
 
 ---
 
-## עברית
+<h2 dir="rtl" align="right">עברית</h2>
 
-### מה הפרויקט עושה
-פרויקט **Google Apps Script** המחובר ל־**Google Sheet**, עם **סרגל צד** לניהול פודקאסטים: חיפוש (iTunes), **הזנת כתובת RSS**, או **ייבוא OPML**, צפייה בפרקים, הורדת MP3 ל־**Google Drive** לתיקייה בשם `הסכתים`, ואפשרות להורדה אוטומטית כל **6 שעות**. גיליון **Log** מתעד פעולות וכולל **קישורים** לקבצים שהורדו.
+<h3 dir="rtl" align="right">מה הפרויקט עושה</h3>
+<p dir="rtl" align="right">פרויקט <strong>Google Apps Script</strong> המחובר ל־<strong>Google Sheet</strong>, עם <strong>סרגל צד</strong> לניהול פודקאסטים: חיפוש (iTunes), <strong>הזנת כתובת RSS</strong>, או <strong>ייבוא OPML</strong>, צפייה בפרקים, הורדת MP3 ל־<strong>Google Drive</strong> לתיקייה בשם <code>הסכתים</code>, ואפשרות להורדה אוטומטית כל <strong>6 שעות</strong>. גיליון <strong>Log</strong> מתעד פעולות וכולל <strong>קישורים</strong> לקבצים שהורדו.</p>
 
-### קבצים בפרויקט
-| קובץ | תפקיד |
-|------|--------|
-| `Code.gs` | לוגיקת שרת (RSS, דרייב, מנויים, טריגרים) |
-| `Sidebar.html` | ממשק סרגל הצד (טקסטים בעברית) |
-| `appsscript.json` | מניפסט (הרשאות, V8, אזור זמן) |
-| `CHANGES.md` | יומן שינויים (באנגלית) |
+<h3 dir="rtl" align="right">קבצים בפרויקט</h3>
+<table dir="rtl" align="right">
+  <thead>
+    <tr>
+      <th>קובץ</th>
+      <th>תפקיד</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Code.gs</code></td>
+      <td>לוגיקת שרת (RSS, דרייב, מנויים, טריגרים)</td>
+    </tr>
+    <tr>
+      <td><code>Sidebar.html</code></td>
+      <td>ממשק סרגל הצד (טקסטים בעברית)</td>
+    </tr>
+    <tr>
+      <td><code>appsscript.json</code></td>
+      <td>מניפסט (הרשאות, V8, אזור זמן)</td>
+    </tr>
+    <tr>
+      <td><code>CHANGES.md</code></td>
+      <td>יומן שינויים (באנגלית)</td>
+    </tr>
+  </tbody>
+</table>
 
-### התקנה
+<h3 dir="rtl" align="right">התקנה</h3>
 
-#### אפשרות א – clasp (מתאים למפתחים)
-1. התקנת [clasp](https://github.com/google/clasp): `npm install -g @google/clasp`
-2. `clasp login`
-3. מתיקיית הפרויקט: `clasp create --title "שם לדוגמה" --type sheets` ואז `clasp push`
-4. פתיחת הגיליון → **Extensions → Apps Script**, הרצת **`onOpen`** פעם אחת ואישור **הרשאות**
-5. רענון הגיליון; בתפריט **🎙 הסכתים** → **פתח מנהל הסכתים**
+<h4 dir="rtl" align="right">אפשרות א – clasp (מתאים למפתחים)</h4>
+<ol dir="rtl" align="right">
+  <li>התקנת <a href="https://github.com/google/clasp">clasp</a>: <code>npm install -g @google/clasp</code></li>
+  <li><code>clasp login</code></li>
+  <li>מתיקיית הפרויקט: <code>clasp create --title "שם לדוגמה" --type sheets</code> ואז <code>clasp push</code></li>
+  <li>פתיחת הגיליון → <strong>Extensions → Apps Script</strong>, הרצת <strong><code>onOpen</code></strong> פעם אחת ואישור <strong>הרשאות</strong></li>
+  <li>רענון הגיליון; בתפריט <strong>🎙 הסכתים</strong> → <strong>פתח מנהל הסכתים</strong></li>
+</ol>
 
-#### אפשרות ב – העתקה ידנית בדפדפן
-1. **חדש → Google Sheets**
-2. **Extensions → Apps Script**
-3. להחליף את `Code.gs` בתוכן הקובץ מהריפו
-4. **קובץ חדש → HTML**, שם **`Sidebar`** (בלי סיומת), להדביק את `Sidebar.html`
-5. בהגדרות הפרויקט: **Show app manifest** ולעדכן את `appsscript.json` לפי הצורך
-6. שמירה, הרצת **`onOpen`**, אישור הרשאות, רענון הגיליון, פתיחת הסרגל מהתפריט
+<h4 dir="rtl" align="right">אפשרות ב – העתקה ידנית בדפדפן</h4>
+<ol dir="rtl" align="right">
+  <li><strong>חדש → Google Sheets</strong></li>
+  <li><strong>Extensions → Apps Script</strong></li>
+  <li>להחליף את <code>Code.gs</code> בתוכן הקובץ מהריפו</li>
+  <li><strong>קובץ חדש → HTML</strong>, שם <strong><code>Sidebar</code></strong> (בלי סיומת), להדביק את <code>Sidebar.html</code></li>
+  <li>בהגדרות הפרויקט: <strong>Show app manifest</strong> ולעדכן את <code>appsscript.json</code> לפי הצורך</li>
+  <li>שמירה, הרצת <strong><code>onOpen</code></strong>, אישור הרשאות, רענון הגיליון, פתיחת הסרגל מהתפריט</li>
+</ol>
 
-### שימוש בסרגל הצד
-- **🔍** – חיפוש פודקאסטים והרשמה מתוצאות  
-- **🔗** – הוספת פודקאסט לפי **כתובת RSS** (הפיד נבדק לפני השמירה)  
-- **📥 / 📤** – ייבוא וייצוא **OPML**  
-- אחרי הרשמה מחיפוש: **חזרה** ממסך החיפוש מרעננת את רשימת המנויים מהשרת
+<h3 dir="rtl" align="right">שימוש בסרגל הצד</h3>
+<ul dir="rtl" align="right">
+  <li><strong>🔍</strong> – חיפוש פודקאסטים והרשמה מתוצאות</li>
+  <li><strong>🔗</strong> – הוספת פודקאסט לפי <strong>כתובת RSS</strong> (הפיד נבדק לפני השמירה)</li>
+  <li><strong>📥 / 📤</strong> – ייבוא וייצוא <strong>OPML</strong></li>
+  <li>אחרי הרשמה מחיפוש: <strong>חזרה</strong> ממסך החיפוש מרעננת את רשימת המנויים מהשרת</li>
+</ul>
 
-### הורדה אוטומטית (אופציונלי)
-בתפריט **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שעות)**. יורדים פרקים שפורסמו **אחרי** תאריך המנוי. להסרה: **הסר טריגר אוטומטי**.
+<h3 dir="rtl" align="right">הורדה אוטומטית (אופציונלי)</h3>
+<p dir="rtl" align="right">בתפריט <strong>🎙 הסכתים</strong> → <strong>התקן טריגר אוטומטי (כל 6 שעות)</strong>. יורדים פרקים שפורסמו <strong>אחרי</strong> תאריך המנוי. להסרה: <strong>הסר טריגר אוטומטי</strong>.</p>
 
-### מבנה האחסון
-| מיקום | תיאור |
-|-------|--------|
-| מאפייני הסקריפט | מנויים, כתובות פרקים שהורדו, מצב המשך ריצה |
-| דרייב / `הסכתים/` | תיקיית שורש |
-| דרייב / `הסכתים/<שם פודקאסט>/` | קבצי MP3 |
-| גיליון `Log` | לוג הורדות ושגיאות; בעמודה **קישור** קישורים לקבצים בדרייב |
+<h3 dir="rtl" align="right">מבנה האחסון</h3>
+<table dir="rtl" align="right">
+  <thead>
+    <tr>
+      <th>מיקום</th>
+      <th>תיאור</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>מאפייני הסקריפט</td>
+      <td>מנויים, כתובות פרקים שהורדו, מצב המשך ריצה</td>
+    </tr>
+    <tr>
+      <td>דרייב / <code>הסכתים/</code></td>
+      <td>תיקיית שורש</td>
+    </tr>
+    <tr>
+      <td>דרייב / <code>הסכתים/&lt;שם פודקאסט&gt;/</code></td>
+      <td>קבצי MP3</td>
+    </tr>
+    <tr>
+      <td>גיליון <code>Log</code></td>
+      <td>לוג הורדות ושגיאות; בעמודה <strong>קישור</strong> קישורים לקבצים בדרייב</td>
+    </tr>
+  </tbody>
+</table>
 
-### הערות טכניות
-- **שמות קבצים:** `YYMMDD שם הפרק.mp3`. קבצים גדולים מחולקים: `YYMMDD שם (חלק 001).mp3` וכו'.
-- **מגבלת 6 דקות:** ריצה ארוכה שומרת מצב ומתזמנת המשך בערך אחרי 30 שניות. `lastRunTime` נכתב רק כשהריצה מסתיימת בהצלחה.
-- **מחיקה בדרייב:** אם מחקת קובץ מהדרייב, הסקריפט יכול לזהות שאין קובץ צפוי ולאפשר **הורדה מחדש**.
-- **שגיאת PERMISSION_DENIED בסרגל:** נסה **חשבון גוגל יחיד** בדפדפן (למשל **חלון אנונימי**) — לעיתים הבעיה נגרמת מכמה חשבונות מחוברים בו־זמנית.
+<h3 dir="rtl" align="right">הערות טכניות</h3>
+<ul dir="rtl" align="right">
+  <li><strong>שמות קבצים:</strong> <code>YYMMDD שם הפרק.mp3</code>. קבצים גדולים מחולקים: <code>YYMMDD שם (חלק 001).mp3</code> וכו'.</li>
+  <li><strong>מגבלת 6 דקות:</strong> ריצה ארוכה שומרת מצב ומתזמנת המשך בערך אחרי 30 שניות. <code>lastRunTime</code> נכתב רק כשהריצה מסתיימת בהצלחה.</li>
+  <li><strong>מחיקה בדרייב:</strong> אם מחקת קובץ מהדרייב, הסקריפט יכול לזהות שאין קובץ צפוי ולאפשר <strong>הורדה מחדש</strong>.</li>
+  <li><strong>שגיאת PERMISSION_DENIED בסרגל:</strong> נסה <strong>חשבון גוגל יחיד</strong> בדפדפן (למשל <strong>חלון אנונימי</strong>) — לעיתים הבעיה נגרמת מכמה חשבונות מחוברים בו־זמנית.</li>
+</ul>

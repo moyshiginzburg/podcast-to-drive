@@ -261,7 +261,8 @@
   .subscribe-btn.subscribed { background: #1e8e3e; cursor: default; }
   .subscribe-btn:disabled { opacity: 0.7; cursor: default; }
 
-  /* ── OPML modal backdrop ── */
+  /* ── Modal backdrops (RSS + OPML) ── */
+  #rss-modal,
   #opml-modal {
     display: none;
     position: fixed;
@@ -271,6 +272,7 @@
     align-items: center;
     justify-content: center;
   }
+  #rss-modal.visible,
   #opml-modal.visible { display: flex; }
   .modal-box {
     background: #fff;
