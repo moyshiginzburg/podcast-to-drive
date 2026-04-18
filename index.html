@@ -1,187 +1,303 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מדריך פשוט: התקנת מנהל הסכתים</title>
+  <title>מנהל הפודקאסטים האישי שלכם ב-Google Drive</title>
   <style>
+    /* הגדרות בסיס וצבעים */
     :root {
-      --bg: #f5f7fb;
+      --bg: #f8f9fa;
       --card: #ffffff;
-      --text: #1f2937;
-      --muted: #4b5563;
-      --brand: #2563eb;
-      --ok: #15803d;
-      --border: #dbe2ea;
-      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --text: #202124;
+      --primary: #1a73e8;
+      --secondary: #e8f0fe;
+      --border: #dadce0;
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     }
+
     * { box-sizing: border-box; }
+    
     body {
-      margin: 0;
-      font-family: Arial, "Noto Sans Hebrew", sans-serif;
-      background: var(--bg);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
       color: var(--text);
       line-height: 1.6;
+      margin: 0;
+      padding: 0;
     }
-    .wrap {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 24px 16px 60px;
+
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
     }
-    .hero, .card {
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 1.25rem;
+      color: #5f6368;
+      margin-top: 0;
+    }
+
+    .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 12px;
+      padding: 32px;
       box-shadow: var(--shadow);
+      margin-bottom: 30px;
     }
-    .hero {
-      padding: 22px;
-      margin-bottom: 16px;
+
+    .card h2 {
+      color: var(--primary);
+      margin-top: 0;
+      border-bottom: 2px solid var(--secondary);
+      padding-bottom: 12px;
+      font-size: 1.5rem;
     }
-    h1 { margin: 0 0 8px; font-size: 1.9rem; }
-    h2 { margin: 0 0 10px; font-size: 1.3rem; }
-    p { margin: 0 0 10px; }
-    .muted { color: var(--muted); }
-    .grid {
-      display: grid;
-      gap: 12px;
-    }
-    .step {
-      padding: 16px;
-    }
-    .badge {
-      display: inline-block;
-      background: #e8f0ff;
-      color: #11317a;
-      border: 1px solid #bed2ff;
-      border-radius: 999px;
-      padding: 2px 10px;
-      font-size: .85rem;
-      margin-bottom: 8px;
-    }
-    .shot {
-      margin-top: 10px;
-      border: 1px dashed #94a3b8;
-      border-radius: 12px;
-      background: #f8fafc;
-      padding: 10px;
-      color: #334155;
-      font-size: .95rem;
-    }
-    .btns {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    button, a.btn {
-      appearance: none;
-      border: 1px solid #c9d5ff;
-      background: #eff4ff;
-      color: #102f7a;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: .95rem;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-    }
-    button:hover, a.btn:hover { background: #e3edff; }
-    .ok {
-      background: #ecfdf3;
-      border: 1px solid #b8f0ce;
-      color: #14532d;
-      border-radius: 12px;
-      padding: 12px;
-      margin-top: 10px;
-    }
-    code {
-      background: #f1f5f9;
-      border: 1px solid #dbe2ea;
+
+    .highlight-box {
+      background-color: var(--secondary);
+      color: #1967d2;
+      padding: 20px;
       border-radius: 8px;
-      padding: 2px 6px;
-      font-size: .95em;
+      font-weight: 500;
+      margin: 24px 0;
+      border-right: 4px solid var(--primary);
     }
-    details {
-      margin-top: 14px;
-      border-top: 1px solid var(--border);
-      padding-top: 10px;
+
+    .features-list {
+      list-style-type: none;
+      padding: 0;
     }
-    summary {
+
+    .features-list li {
+      position: relative;
+      padding-right: 28px;
+      margin-bottom: 12px;
+    }
+
+    .features-list li::before {
+      content: "✓";
+      position: absolute;
+      right: 0;
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    .steps-container {
+      display: grid;
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    .step {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      position: relative;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .step-number {
+      background: var(--primary);
+      color: #fff;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-left: 12px;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .step p {
+      margin: 0 0 16px 0;
+      color: #4d5156;
+    }
+
+    code {
+      background: #f1f3f4;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #d93025;
+      font-size: 1rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      background: #fff;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      padding: 8px 16px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.2s ease;
       cursor: pointer;
-      font-weight: 700;
+      font-size: 0.95rem;
+      margin-left: 8px;
+    }
+
+    .btn:hover {
+      background: var(--secondary);
+    }
+
+    .btn-copy {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-copy:hover {
+      background: #1557b0;
+      color: #fff;
+    }
+
+    .success-msg {
+      background: #e6f4ea;
+      color: #137333;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #ceead6;
+      margin-top: 16px;
+      font-weight: 500;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 0 16px; margin: 20px auto; }
+      .header h1 { font-size: 2rem; }
+      .card { padding: 24px 16px; }
+      .btn { margin-bottom: 8px; }
     }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <section class="hero">
-      <h1>🎙 מדריך פשוט להתקנה</h1>
-      <p><b>מה זה בכלל?</b> זה כלי שמחבר בין פודקאסטים ל־Google Drive דרך Google Sheets, כדי שתוכלו לשמור פרקים בצורה מסודרת בדרייב.</p>
-      <p>הוא מוסיף לגיליון שלכם תפריט בשם <b>🎙 הסכתים</b>, ומשם אפשר לפתוח מנהל פשוט לחיפוש פודקאסטים ולהורדת פרקים.</p>
-      <p>הדף הזה מיועד לאנשים לא טכנולוגיים: צעד־אחר־צעד, בעברית פשוטה, בלי בלבול.</p>
-      <p class="muted">המטרה: להתקין את מנהל ההסכתים בגיליון Google Sheets ולפתוח אותו מתוך התפריט.</p>
+
+  <main class="container">
+    <header class="header">
+      <h1>🎙 מנהל הפודקאסטים האישי שלכם</h1>
+      <p>כל הפודקאסטים שאתם אוהבים, מסודרים אצלכם ב-Google Drive</p>
+    </header>
+
+    <section class="card">
+      <h2>מה זה בעצם?</h2>
+      <p>הכלי הזה הוא מערכת חכמה ופשוטה שנועדה לעשות סדר בפרקי הפודקאסטים שלכם. במקום להיות תלויים באפליקציות צד-שלישי עמוסות בפרסומות, המערכת הזו מורידה את קבצי השמע של הפודקאסטים שאתם אוהבים ישירות אל חשבון ה-Google Drive שלכם.</p>
+      
+      <div class="highlight-box">
+        🔒 <strong>הפרטיות שלכם נשמרת:</strong> הכל נשאר אצלכם. המערכת לא שולחת אף מידע לשרתים חיצוניים ואין צורך להירשם לשום שירות. היא פועלת מתוך גיליון האקסל שלכם (Google Sheets), וכל קבצי השמע נשמרים בתיקייה ייעודית בשם <code>הסכתים</code> בדרייב הפרטי שלכם.
+      </div>
+
+      <p>לאחר התקנה פשוטה וחד-פעמית, יתווסף לגיליון שלכם תפריט שיאפשר לכם:</p>
+      <ul class="features-list">
+        <li>לחפש פודקאסטים ולהירשם אליהם בקלות.</li>
+        <li>להוריד פרקים באופן ידני בלחיצת כפתור.</li>
+        <li>להפעיל מצב "טייס אוטומטי" – המערכת תבדוק כל 6 שעות אם יצאו פרקים חדשים ותוריד אותם עבורכם מבלי שתצטרכו לעשות דבר.</li>
+        <li>לצפות ביומן רישום (Log) שמציג בדיוק מה ירד, מתי, יחד עם קישור ישיר לקובץ.</li>
+      </ul>
     </section>
 
-    <section class="grid">
-      <article class="card step">
-        <div class="badge">שלב 1</div>
-        <h2>📄 פתחו גיליון חדש</h2>
-        <p>היכנסו ל־Google Drive, צרו <b>Google Sheets</b> חדש.</p>
-        <div class="shot">🖼️ צילום מסך: Google Drive → חדש (+) → Google Sheets</div>
-      </article>
+    <section class="card">
+      <h2>איך מתקינים? (מדריך צעד-אחר-צעד)</h2>
+      <p>ההתקנה לוקחת דקות ספורות ולא דורשת שום ידע קודם בתכנות. פשוט עקבו אחרי השלבים:</p>
 
-      <article class="card step">
-        <div class="badge">שלב 2</div>
-        <h2>🧩 פתחו את עורך הסקריפט</h2>
-        <p>בתוך הגיליון: <b>Extensions</b> (תוספים) → <b>Apps Script</b>.</p>
-        <div class="shot">🖼️ צילום מסך: התפריט העליון עם Extensions → Apps Script</div>
-      </article>
+      <div class="steps-container">
+        
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">1</span>
+            <h3 class="step-title">פותחים גיליון גוגל חדש</h3>
+          </div>
+          <p>היכנסו ל-Google Drive שלכם וצרו גיליון אלקטרוני חדש (Google Sheets). הגיליון הזה ישמש כלוח הבקרה שלכם.</p>
+        </article>
 
-      <article class="card step">
-        <div class="badge">שלב 3</div>
-        <h2>📋 הדביקו את <code>Code.gs</code></h2>
-        <p>מחקו את הקוד שמופיע כברירת מחדל, והדביקו את תוכן הקובץ <code>Code.gs</code> מהריפו.</p>
-        <div class="btns">
-          <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Code.gs" target="_blank" rel="noreferrer">פתח Code.gs</a>
-        </div>
-        <div class="shot">🖼️ צילום מסך: עורך Apps Script אחרי הדבקה של Code.gs</div>
-      </article>
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">2</span>
+            <h3 class="step-title">נכנסים לעורך הקוד</h3>
+          </div>
+          <p>בתפריט העליון של הגיליון, לחצו על <strong>Extensions</strong> (או "תוספים" בעברית) ובחרו באפשרות <strong>Apps Script</strong>. ייפתח לכם חלון חדש.</p>
+        </article>
 
-      <article class="card step">
-        <div class="badge">שלב 4</div>
-        <h2>🖼️ צרו קובץ HTML בשם <code>Sidebar</code></h2>
-        <p>לחצו על <b>+</b> ליד קבצים → <b>HTML</b> → תנו שם: <code>Sidebar</code> (בלי ‎.html).</p>
-        <p>הדביקו שם את תוכן <code>Sidebar.html</code> מהריפו.</p>
-        <div class="btns">
-          <button data-copy="Sidebar">העתק שם קובץ: Sidebar</button>
-          <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Sidebar.html" target="_blank" rel="noreferrer">פתח Sidebar.html</a>
-        </div>
-        <div class="shot">🖼️ צילום מסך: חלון יצירת HTML עם השם Sidebar</div>
-      </article>
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">3</span>
+            <h3 class="step-title">מעתיקים את קובץ ההפעלה</h3>
+          </div>
+          <p>בחלון שנפתח, תראו קוד קצר שמופיע כברירת מחדל. מחקו אותו לחלוטין. במקומו, הדביקו את התוכן של הקובץ <code>Code.gs</code> שלנו.</p>
+          <div>
+            <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Code.gs" target="_blank">📄 פתח את Code.gs להעתקה</a>
+          </div>
+        </article>
 
-      <article class="card step">
-        <div class="badge">שלב 5</div>
-        <h2>✅ שמירה והרשאות</h2>
-        <p>לחצו <b>Save</b>, בחרו פונקציה <code>onOpen</code>, ואז <b>Run</b>. אשרו הרשאות כשתתבקשו.</p>
-        <div class="btns">
-          <button data-copy="onOpen">העתק שם פונקציה: onOpen</button>
-        </div>
-        <div class="shot">🖼️ צילום מסך: בחירת onOpen ולחיצה על Run</div>
-      </article>
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">4</span>
+            <h3 class="step-title">מוסיפים את חלון התצוגה</h3>
+          </div>
+          <p>בצד שמאל למעלה (מעל רשימת הקבצים), לחצו על סמל הפלוס (<strong>+</strong>) ובחרו ב-<strong>HTML</strong>. תנו לקובץ החדש את השם המדויק <code>Sidebar</code> (שימו לב לאותיות הגדולות). הדביקו פנימה את התוכן של הקובץ <code>Sidebar.html</code>.</p>
+          <div>
+            <button class="btn btn-copy" data-copy="Sidebar">העתק את השם: Sidebar</button>
+            <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Sidebar.html" target="_blank">🖼️ פתח את Sidebar.html להעתקה</a>
+          </div>
+        </article>
 
-      <article class="card step">
-        <div class="badge">שלב 6</div>
-        <h2>🎉 סיימנו</h2>
-        <p>חזרו לגיליון ורעננו את הדף. יופיע תפריט <b>🎙 הסכתים</b> → <b>פתח מנהל הסכתים</b>.</p>
-        <div class="ok">אם התפריט לא מופיע מיד, רענון נוסף בדרך כלל פותר את זה.</div>
-        <div class="shot">🖼️ צילום מסך: תפריט 🎙 הסכתים בגיליון</div>
-      </article>
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">5</span>
+            <h3 class="step-title">שומרים ומאשרים</h3>
+          </div>
+          <p>לחצו על סמל השמירה (💾). לאחר מכן, בחלק העליון בחרו בפונקציה שנקראת <code>onOpen</code> מתוך הרשימה, ולחצו על הכפתור <strong>Run</strong> (הפעל). גוגל תבקש מכם לאשר הרשאות כדי לאפשר למערכת ליצור קבצים בדרייב שלכם – אשרו הכל ללא חשש (תחת מתקדם / Advanced).</p>
+          <div>
+            <button class="btn btn-copy" data-copy="onOpen">העתק את שם הפונקציה: onOpen</button>
+          </div>
+        </article>
+
+        <article class="step">
+          <div class="step-header">
+            <span class="step-number">6</span>
+            <h3 class="step-title">סיימנו! מתחילים להוריד</h3>
+          </div>
+          <p>סגרו את חלון הקוד וחזרו לגיליון האקסל שלכם. רעננו את הדף. כעת תראו בתפריט העליון כפתור חדש בשם <strong>🎙 הסכתים</strong>. לחצו עליו, בחרו ב"פתח מנהל הסכתים", ותתחילו לארגן את הפודקאסטים שלכם!</p>
+          <div class="success-msg">
+            💡 טיפ: אם התפריט החדש לא מופיע מיד אחרי הרענון הראשון, המתינו כמה שניות ורעננו את הדף שוב.
+          </div>
+        </article>
+
+      </div>
     </section>
-
   </main>
 
   <script>
+    // סקריפט פשוט להעתקת טקסט מהכפתורים
     function fallbackCopy(text) {
       const area = document.createElement('textarea');
       area.value = text;
@@ -195,20 +311,24 @@
     }
 
     document.querySelectorAll('button[data-copy]').forEach((btn) => {
-      const original = btn.textContent;
+      const originalText = btn.textContent;
       btn.addEventListener('click', async () => {
-        const text = btn.getAttribute('data-copy') || '';
+        const textToCopy = btn.getAttribute('data-copy') || '';
         try {
           if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(text);
+            await navigator.clipboard.writeText(textToCopy);
           } else {
-            fallbackCopy(text);
+            fallbackCopy(textToCopy);
           }
-          btn.textContent = 'הועתק ✅';
-          setTimeout(() => { btn.textContent = original; }, 1400);
+          btn.textContent = 'הועתק בהצלחה! ✓';
+          btn.style.backgroundColor = '#137333';
+          setTimeout(() => { 
+            btn.textContent = originalText; 
+            btn.style.backgroundColor = '';
+          }, 2000);
         } catch (e) {
-          btn.textContent = 'לא הצליח, נסו שוב';
-          setTimeout(() => { btn.textContent = original; }, 1800);
+          btn.textContent = 'שגיאה בהעתקה';
+          setTimeout(() => { btn.textContent = originalText; }, 2000);
         }
       });
     });
