@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<base target="_top">
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    background: #f8f9fa;
+    color: #202124;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  #header {
+    background: #1a73e8;
+    color: #fff;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  #header-title {
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hdr-btn {
+    background: rgba(255,255,255,0.18);
+    border: none;
+    color: #fff;
+    border-radius: 4px;
+    padding: 4px 7px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .hdr-btn:hover { background: rgba(255,255,255,0.32); }
+
+  /* ── Content area ── */
+  #content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  /* ── Screens ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── Back bar ── */
+  .back-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .back-btn {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+  }
+  .back-btn:hover { background: #e8eaed; }
+  .screen-title {
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Search bar ── */
+  #search-bar {
+    display: none;
+    padding: 6px 10px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+  }
+  #search-bar.visible { display: flex; gap: 6px; }
+  #search-input {
+    flex: 1;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 13px;
+    outline: none;
+  }
+  #search-input:focus { border-color: #1a73e8; }
+  .search-go-btn {
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .search-go-btn:hover { background: #1558b0; }
+
+  /* ── Podcast list ── */
+  .podcast-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    border-bottom: 1px solid #efefef;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .podcast-item:hover { background: #e8f0fe; }
+  .podcast-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #d2e3fc;
+  }
+  .podcast-thumb-placeholder {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    background: #d2e3fc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .podcast-name {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.3;
+    flex: 1;
+    word-break: break-word;
+  }
+  .podcast-remove {
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    border-radius: 3px;
+  }
+  .podcast-remove:hover { color: #d93025; background: #fce8e6; }
+
+  /* ── Episode list ── */
+  .episode-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .episode-header {
+    padding: 8px 10px;
+  }
+  .episode-title {
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1.4;
+    margin-bottom: 2px;
+  }
+  .episode-date {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 5px;
+  }
+  .episode-desc {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.4;
+    display: none;
+    margin-bottom: 6px;
+  }
+  .episode-desc.visible { display: block; }
+  .episode-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 8px;
+  }
+  .desc-toggle {
+    font-size: 11px;
+    color: #1a73e8;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+  }
+  .download-btn {
+    margin-right: auto;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .download-btn:hover:not(:disabled) { background: #1558b0; }
+  .download-btn:disabled { opacity: 0.6; cursor: default; }
+  .download-btn.success { background: #1e8e3e; }
+  .download-btn.error { background: #d93025; }
+
+  /* ── Search results ── */
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 6px;
+    border-bottom: 1px solid #efefef;
+  }
+  .result-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #e8eaed;
+  }
+  .result-info { flex: 1; overflow: hidden; }
+  .result-name { font-size: 12px; font-weight: 500; line-height: 1.3; }
+  .result-artist { font-size: 11px; color: #888; }
+  .subscribe-btn {
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .subscribe-btn:hover:not(:disabled) { background: #1558b0; }
+  .subscribe-btn.subscribed { background: #1e8e3e; cursor: default; }
+  .subscribe-btn:disabled { opacity: 0.7; cursor: default; }
+
+  /* ── OPML modal backdrop ── */
+  #opml-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  #opml-modal.visible { display: flex; }
+  .modal-box {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    width: 90%;
+    max-width: 340px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .modal-title { font-weight: 600; margin-bottom: 10px; font-size: 14px; }
+  .modal-textarea {
+    width: 100%;
+    height: 140px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 11px;
+    resize: vertical;
+    font-family: monospace;
+    outline: none;
+  }
+  .modal-textarea:focus { border-color: #1a73e8; }
+  .modal-text-input {
+    width: 100%;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 13px;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .modal-text-input:focus { border-color: #1a73e8; }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    justify-content: flex-end;
+  }
+  .modal-cancel {
+    background: #f8f9fa;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .modal-cancel:hover { background: #e8eaed; }
+  .modal-confirm {
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .modal-confirm:hover { background: #1558b0; }
+
+  /* ── Misc ── */
+  .empty-msg {
+    text-align: center;
+    color: #888;
+    padding: 24px 10px;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #ccc;
+    border-top-color: #1a73e8;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .notice {
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .notice.success { background: #e6f4ea; color: #137333; }
+  .notice.error   { background: #fce8e6; color: #d93025; }
+  .notice.info    { background: #e8f0fe; color: #1558b0; }
+
+  a { color: #1a73e8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ══ Header ══════════════════════════════════════════════ -->
+<div id="header">
+  <span id="header-title">🎙 הסכתים</span>
+  <button class="hdr-btn" id="btn-search-toggle" title="חיפוש פודקאסטים">🔍</button>
+  <button class="hdr-btn" id="btn-add-rss" title="הוסף מכתובת RSS">🔗</button>
+  <button class="hdr-btn" id="btn-import-opml" title="ייבוא OPML">📥</button>
+  <button class="hdr-btn" id="btn-export-opml" title="ייצוא OPML">📤</button>
+</div>
+
+<!-- ══ Search bar ═══════════════════════════════════════════ -->
+<div id="search-bar">
+  <input type="text" id="search-input" placeholder="חפש פודקאסט...">
+  <button class="search-go-btn" id="btn-search-go">חפש</button>
+</div>
+
+<!-- ══ Main content ═════════════════════════════════════════ -->
+<div id="content">
+
+  <!-- Screen: Podcast list -->
+  <div id="screen-podcasts" class="screen active">
+    <div id="podcasts-list"></div>
+  </div>
+
+  <!-- Screen: Episode list -->
+  <div id="screen-episodes" class="screen">
+    <div class="back-bar">
+      <button class="back-btn" id="btn-back-podcasts">← חזרה</button>
+      <span class="screen-title" id="episodes-podcast-title"></span>
+    </div>
+    <div id="episodes-list"></div>
+  </div>
+
+  <!-- Screen: Search results -->
+  <div id="screen-search" class="screen">
+    <div class="back-bar">
+      <button class="back-btn" id="btn-back-search">← חזרה</button>
+      <span class="screen-title">תוצאות חיפוש</span>
+    </div>
+    <div id="search-results-list"></div>
+  </div>
+
+</div>
+
+<!-- ══ RSS URL modal ═══════════════════════════════════════════ -->
+<div id="rss-modal">
+  <div class="modal-box">
+    <div class="modal-title">🔗 הוספת פודקאסט מ-RSS</div>
+    <p style="font-size:12px;color:#555;margin-bottom:8px;">הזן כתובת מלאה של קובץ ה-RSS של הפודקאסט:</p>
+    <input type="text" class="modal-text-input" id="rss-url-input" dir="ltr" placeholder="https://example.com/podcast.xml">
+    <div class="modal-actions">
+      <button class="modal-cancel" id="rss-cancel">ביטול</button>
+      <button class="modal-confirm" id="rss-confirm">הוסף</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ OPML import modal ════════════════════════════════════ -->
+<div id="opml-modal">
+  <div class="modal-box">
+    <div class="modal-title">📥 ייבוא OPML</div>
+    <p style="font-size:12px;color:#555;margin-bottom:8px;">הדבק את תוכן קובץ ה-OPML כאן:</p>
+    <textarea class="modal-textarea" id="opml-text" placeholder='<?xml version="1.0"?> ...'></textarea>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="opml-cancel">ביטול</button>
+      <button class="modal-confirm" id="opml-confirm">ייבא</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let currentPodcast = null;   // { url, title, imageUrl }
+let subscriptions  = [];     // [{ url, title, imageUrl, subscribeDate }]
+
+// ══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════
+// PODCAST LIST SCREEN
+// ══════════════════════════════════════════════════════════════
+function loadPodcastList() {
+  showScreen('screen-podcasts');
+  const container = document.getElementById('podcasts-list');
+  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>טוען...</div>`;
+
+  google.script.run
+    .withSuccessHandler(list => {
+      subscriptions = list || [];
+      renderPodcastList();
+    })
+    .withFailureHandler(err => {
+      container.innerHTML = `<div class="notice error">שגיאה: ${err.message}</div>`;
+    })
+    .getSubscriptionsList();
+}
+
+function renderPodcastList() {
+  const container = document.getElementById('podcasts-list');
+  if (subscriptions.length === 0) {
+    container.innerHTML = `<div class="empty-msg">
+      אין מנויים עדיין.<br>לחץ 🔍 לחיפוש, 🔗 להזנת כתובת RSS,<br>או 📥 לייבוא OPML.
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  subscriptions.forEach(pod => {
+    const item = document.createElement('div');
+    item.className = 'podcast-item';
+    item.innerHTML = `
+      ${pod.imageUrl
+        ? `<img class="podcast-thumb" src="${escHtml(pod.imageUrl)}" alt="" onerror="this.parentNode.replaceChild(makePlaceholder(), this)">`
+        : `<div class="podcast-thumb-placeholder">🎙</div>`}
+      <span class="podcast-name">${escHtml(pod.title)}</span>
+      <button class="podcast-remove" title="הסר מנוי" data-url="${escHtml(pod.url)}">×</button>
+    `;
+
+    // Click on item → load episodes (but not on remove button)
+    item.addEventListener('click', e => {
+      if (e.target.classList.contains('podcast-remove')) return;
+      openEpisodeList(pod);
+    });
+
+    // Remove button
+    item.querySelector('.podcast-remove').addEventListener('click', e => {
+      e.stopPropagation();
+      if (!confirm(`הסר את "${pod.title}" מהמנויים?`)) return;
+      google.script.run
+        .withSuccessHandler(() => loadPodcastList())
+        .withFailureHandler(err => alert('שגיאה: ' + err.message))
+        .removeSubscription(pod.url);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function makePlaceholder() {
+  const d = document.createElement('div');
+  d.className = 'podcast-thumb-placeholder';
+  d.textContent = '🎙';
+  return d;
+}
+
+// ══════════════════════════════════════════════════════════════
+// EPISODE LIST SCREEN
+// ══════════════════════════════════════════════════════════════
+function openEpisodeList(pod) {
+  currentPodcast = pod;
+  document.getElementById('episodes-podcast-title').textContent = pod.title;
+  const container = document.getElementById('episodes-list');
+  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>טוען פרקים...</div>`;
+  showScreen('screen-episodes');
+
+  google.script.run
+    .withSuccessHandler(result => {
+      if (!result.success) {
+        container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(result.error)}</div>`;
+        return;
+      }
+      renderEpisodes(result.episodes || []);
+    })
+    .withFailureHandler(err => {
+      container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(err.message)}</div>`;
+    })
+    .fetchEpisodeList(pod.url);
+}
+
+function renderEpisodes(episodes) {
+  const container = document.getElementById('episodes-list');
+  if (episodes.length === 0) {
+    container.innerHTML = `<div class="empty-msg">לא נמצאו פרקים בפיד זה.</div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  episodes.forEach((ep, idx) => {
+    const item = document.createElement('div');
+    item.className = 'episode-item';
+    item.dataset.url = ep.url;
+
+    const dateStr = ep.date ? formatDisplayDate(ep.date) : '';
+    const hasDesc = ep.description && ep.description.trim().length > 0;
+
+    item.innerHTML = `
+      <div class="episode-header">
+        <div class="episode-title">${escHtml(ep.title)}</div>
+        ${dateStr ? `<div class="episode-date">${escHtml(dateStr)}</div>` : ''}
+        ${hasDesc ? `<div class="episode-desc" id="desc-${idx}">${escHtml(ep.description)}</div>` : ''}
+      </div>
+      <div class="episode-footer">
+        ${hasDesc ? `<button class="desc-toggle" data-idx="${idx}">הצג תיאור ▸</button>` : '<span></span>'}
+        <button class="download-btn" data-ep-idx="${idx}">הורד לדרייב</button>
+      </div>
+    `;
+
+    // Toggle description
+    if (hasDesc) {
+      item.querySelector('.desc-toggle').addEventListener('click', function() {
+        const descEl = document.getElementById(`desc-${idx}`);
+        const open = descEl.classList.toggle('visible');
+        this.textContent = open ? 'הסתר תיאור ▾' : 'הצג תיאור ▸';
+      });
+    }
+
+    // Download button
+    item.querySelector('.download-btn').addEventListener('click', function() {
+      triggerDownload(this, ep);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function triggerDownload(btn, ep) {
+  btn.textContent = '⏳ מוריד...';
+  btn.disabled = true;
+  btn.classList.remove('success', 'error');
+
+  const episodeData = {
+    url:          ep.url,
+    title:        ep.title,
+    date:         ep.date,
+    description:  ep.description || '',
+    podcastTitle: currentPodcast ? currentPodcast.title : 'כללי'
+  };
+
+  google.script.run
+    .withSuccessHandler(result => {
+      if (result.success) {
+        btn.classList.add('success');
+        if (result.files && result.files.length === 1) {
+          const link = document.createElement('a');
+          link.href = result.files[0].driveUrl;
+          link.target = '_blank';
+          link.textContent = '✓ בדרייב';
+          link.style.cssText = 'font-size:11px;color:#fff;text-decoration:none;';
+          btn.replaceWith(link);
+        } else if (result.files && result.files.length > 1) {
+          btn.textContent = `✓ ${result.files.length} חלקים בדרייב`;
+        } else {
+          btn.textContent = '✓ בדרייב';
+        }
+      } else {
+        btn.classList.add('error');
+        btn.disabled = false;
+        btn.textContent = '✗ שגיאה';
+        btn.title = result.error || 'שגיאה לא ידועה';
+        if (result.alreadyDownloaded) {
+          btn.textContent = '✓ כבר הורד';
+          btn.classList.remove('error');
+          btn.classList.add('success');
+          btn.disabled = true;
+        }
+      }
+    })
+    .withFailureHandler(err => {
+      btn.classList.add('error');
+      btn.disabled = false;
+      btn.textContent = '✗ שגיאה';
+      btn.title = err.message || '';
+    })
+    .downloadEpisode(episodeData);
+}
+
+// ══════════════════════════════════════════════════════════════
+// SEARCH SCREEN
+// ══════════════════════════════════════════════════════════════
+function runSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  if (!query) return;
+
+  const container = document.getElementById('search-results-list');
+  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>מחפש...</div>`;
+  showScreen('screen-search');
+  document.getElementById('search-bar').classList.remove('visible');
+
+  google.script.run
+    .withSuccessHandler(result => {
+      if (!result.success) {
+        container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(result.error)}</div>`;
+        return;
+      }
+      renderSearchResults(result.results || []);
+    })
+    .withFailureHandler(err => {
+      container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(err.message)}</div>`;
+    })
+    .searchPodcasts(query);
+}
+
+function renderSearchResults(results) {
+  const container = document.getElementById('search-results-list');
+  if (results.length === 0) {
+    container.innerHTML = `<div class="empty-msg">לא נמצאו תוצאות.</div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  results.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'result-item';
+    item.innerHTML = `
+      ${r.artworkUrl
+        ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.style.display='none'">`
+        : `<div class="result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;">🎙</div>`}
+      <div class="result-info">
+        <div class="result-name">${escHtml(r.trackName)}</div>
+        <div class="result-artist">${escHtml(r.artistName)}</div>
+      </div>
+      <button class="subscribe-btn ${r.isSubscribed ? 'subscribed' : ''}"
+              ${r.isSubscribed ? 'disabled' : ''}
+              data-feed="${escHtml(r.feedUrl)}"
+              data-name="${escHtml(r.trackName)}"
+              data-img="${escHtml(r.artworkUrl)}">
+        ${r.isSubscribed ? '✓ מנוי' : 'הרשם'}
+      </button>
+    `;
+
+    item.querySelector('.subscribe-btn').addEventListener('click', function() {
+      if (this.disabled) return;
+      this.disabled = true;
+      this.textContent = '...';
+      const feedUrl   = this.dataset.feed;
+      const title     = this.dataset.name;
+      const imageUrl  = this.dataset.img;
+
+      google.script.run
+        .withSuccessHandler(result => {
+          if (result.success) {
+            this.classList.add('subscribed');
+            this.textContent = '✓ מנוי';
+          } else {
+            this.disabled = false;
+            this.textContent = 'הרשם';
+            alert(result.message || 'שגיאה');
+          }
+        })
+        .withFailureHandler(err => {
+          this.disabled = false;
+          this.textContent = 'הרשם';
+          alert('שגיאה: ' + err.message);
+        })
+        .addSubscription(feedUrl, title, imageUrl);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// OPML IMPORT
+// ══════════════════════════════════════════════════════════════
+function openImportModal() {
+  document.getElementById('opml-text').value = '';
+  document.getElementById('opml-modal').classList.add('visible');
+}
+
+function closeImportModal() {
+  document.getElementById('opml-modal').classList.remove('visible');
+}
+
+function openRssModal() {
+  document.getElementById('rss-url-input').value = '';
+  document.getElementById('rss-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('rss-url-input').focus(), 50);
+}
+
+function closeRssModal() {
+  document.getElementById('rss-modal').classList.remove('visible');
+}
+
+function doAddRss() {
+  const url = document.getElementById('rss-url-input').value.trim();
+  if (!url) {
+    alert('יש להזין כתובת RSS.');
+    return;
+  }
+  const btn = document.getElementById('rss-confirm');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  google.script.run
+    .withSuccessHandler(result => {
+      btn.disabled = false;
+      btn.textContent = 'הוסף';
+      if (result.success) {
+        closeRssModal();
+        loadPodcastList();
+        showBanner('✓ הפודקאסט נוסף למנויים', 'success');
+      } else {
+        alert(result.error || 'שגיאה');
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.textContent = 'הוסף';
+      alert('שגיאה: ' + err.message);
+    })
+    .addSubscriptionFromRssUrl(url);
+}
+
+function doImport() {
+  const text = document.getElementById('opml-text').value.trim();
+  if (!text) { alert('יש להדביק תוכן OPML.'); return; }
+
+  const btn = document.getElementById('opml-confirm');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  google.script.run
+    .withSuccessHandler(result => {
+      btn.disabled = false;
+      btn.textContent = 'ייבא';
+      closeImportModal();
+      if (result.success) {
+        showBanner(`✓ יובאו ${result.added} פודקאסטים, דולגו ${result.skipped} כפילויות.`, 'success');
+        loadPodcastList();
+      } else {
+        showBanner('שגיאה: ' + result.error, 'error');
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.textContent = 'ייבא';
+      closeImportModal();
+      showBanner('שגיאה: ' + err.message, 'error');
+    })
+    .importOPML(text);
+}
+
+// ══════════════════════════════════════════════════════════════
+// OPML EXPORT
+// ══════════════════════════════════════════════════════════════
+function doExport() {
+  showBanner('<span class="spinner"></span> מייצא...', 'info', false);
+  google.script.run
+    .withSuccessHandler(result => {
+      if (result.success) {
+        showBanner(
+          `✓ OPML נשמר: <a href="${result.driveUrl}" target="_blank">${escHtml(result.fileName)}</a>`,
+          'success'
+        );
+      } else {
+        showBanner('שגיאה: ' + escHtml(result.error), 'error');
+      }
+    })
+    .withFailureHandler(err => showBanner('שגיאה: ' + escHtml(err.message), 'error'))
+    .exportOPML();
+}
+
+// ══════════════════════════════════════════════════════════════
+// BANNER / NOTICE
+// ══════════════════════════════════════════════════════════════
+let bannerTimer = null;
+
+function showBanner(html, type, autoHide = true) {
+  let banner = document.getElementById('global-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'global-banner';
+    banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:200;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<div class="notice ${type}" style="margin:0;border-radius:0;">${html}</div>`;
+  if (bannerTimer) clearTimeout(bannerTimer);
+  if (autoHide) bannerTimer = setTimeout(() => { banner.innerHTML = ''; }, 5000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════════════
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ══════════════════════════════════════════════════════════════
+// EVENT WIRING
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+
+  // Header buttons
+  document.getElementById('btn-search-toggle').addEventListener('click', () => {
+    const bar = document.getElementById('search-bar');
+    bar.classList.toggle('visible');
+    if (bar.classList.contains('visible')) {
+      document.getElementById('search-input').focus();
+    }
+  });
+  document.getElementById('btn-add-rss').addEventListener('click', openRssModal);
+  document.getElementById('btn-import-opml').addEventListener('click', openImportModal);
+  document.getElementById('btn-export-opml').addEventListener('click', doExport);
+
+  // Search
+  document.getElementById('btn-search-go').addEventListener('click', runSearch);
+  document.getElementById('search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runSearch();
+  });
+
+  // Back buttons
+  document.getElementById('btn-back-podcasts').addEventListener('click', () => {
+    showScreen('screen-podcasts');
+  });
+  document.getElementById('btn-back-search').addEventListener('click', () => {
+    loadPodcastList();
+  });
+
+  // OPML modal
+  document.getElementById('rss-cancel').addEventListener('click', closeRssModal);
+  document.getElementById('rss-confirm').addEventListener('click', doAddRss);
+  document.getElementById('rss-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('rss-modal')) closeRssModal();
+  });
+  document.getElementById('rss-url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doAddRss();
+  });
+
+  document.getElementById('opml-cancel').addEventListener('click', closeImportModal);
+  document.getElementById('opml-confirm').addEventListener('click', doImport);
+  document.getElementById('opml-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('opml-modal')) closeImportModal();
+  });
+
+  // Initial load
+  loadPodcastList();
+});
+</script>
+</body>
+</html>
