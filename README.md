@@ -55,13 +55,15 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
 
 ---
 
-<h2 dir="rtl" align="right">עברית</h2>
+<div dir="rtl">
 
-<h3 dir="rtl" align="right">מה הפרויקט עושה</h3>
-<p dir="rtl" align="right">פרויקט <strong>Google Apps Script</strong> המחובר ל־<strong>Google Sheet</strong>, עם <strong>סרגל צד</strong> לניהול פודקאסטים: חיפוש (iTunes), <strong>הזנת כתובת RSS</strong>, או <strong>ייבוא OPML</strong>, צפייה בפרקים, הורדת MP3 ל־<strong>Google Drive</strong> לתיקייה בשם <code>הסכתים</code>, ואפשרות להורדה אוטומטית כל <strong>6 שעות</strong>. גיליון <strong>Log</strong> מתעד פעולות וכולל <strong>קישורים</strong> לקבצים שהורדו.</p>
+<h2>מדריך בעברית: מה הכלי נותן ואיך מתקינים</h2>
 
-<h3 dir="rtl" align="right">קבצים בפרויקט</h3>
-<table dir="rtl" align="right">
+<h3>מנויים, הורדת פרקים לדרייב, ולוג עם קישורים לקבצים</h3>
+<p>פרויקט <strong>Google Apps Script</strong> המחובר ל־<strong>Google Sheet</strong>, עם <strong>סרגל צד</strong> לניהול פודקאסטים: חיפוש (iTunes), <strong>הזנת כתובת RSS</strong>, או <strong>ייבוא OPML</strong>, צפייה בפרקים, הורדת MP3 ל־<strong>Google Drive</strong> לתיקייה בשם <code>הסכתים</code>, ואפשרות להורדה אוטומטית כל <strong>6 שעות</strong>. גיליון <strong>Log</strong> מתעד פעולות וכולל <strong>קישורים</strong> לקבצים שהורדו.</p>
+
+<h3>רשימת הקבצים ומה כל אחד אחראי עליו</h3>
+<table>
   <thead>
     <tr>
       <th>קובץ</th>
@@ -88,10 +90,10 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
   </tbody>
 </table>
 
-<h3 dir="rtl" align="right">התקנה</h3>
+<h3>חיבור הפרויקט לגיליון Google Sheets</h3>
 
-<h4 dir="rtl" align="right">אפשרות א – clasp (מתאים למפתחים)</h4>
-<ol dir="rtl" align="right">
+<h4>דרך clasp: יצירת גיליון ודחיפת הקוד משורת הפקודה</h4>
+<ol>
   <li>התקנת <a href="https://github.com/google/clasp">clasp</a>: <code>npm install -g @google/clasp</code></li>
   <li><code>clasp login</code></li>
   <li>מתיקיית הפרויקט: <code>clasp create --title "שם לדוגמה" --type sheets</code> ואז <code>clasp push</code></li>
@@ -99,8 +101,8 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
   <li>רענון הגיליון; בתפריט <strong>🎙 הסכתים</strong> → <strong>פתח מנהל הסכתים</strong></li>
 </ol>
 
-<h4 dir="rtl" align="right">אפשרות ב – העתקה ידנית בדפדפן</h4>
-<ol dir="rtl" align="right">
+<h4>בלי clasp: העתקת קבצים ידנית ב־Apps Script בדפדפן</h4>
+<ol>
   <li><strong>חדש → Google Sheets</strong></li>
   <li><strong>Extensions → Apps Script</strong></li>
   <li>להחליף את <code>Code.gs</code> בתוכן הקובץ מהריפו</li>
@@ -109,19 +111,19 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
   <li>שמירה, הרצת <strong><code>onOpen</code></strong>, אישור הרשאות, רענון הגיליון, פתיחת הסרגל מהתפריט</li>
 </ol>
 
-<h3 dir="rtl" align="right">שימוש בסרגל הצד</h3>
-<ul dir="rtl" align="right">
+<h3>חיפוש ב־iTunes, הזנת RSS, OPML ופעולות בסרגל הצד</h3>
+<ul>
   <li><strong>🔍</strong> – חיפוש פודקאסטים והרשמה מתוצאות</li>
   <li><strong>🔗</strong> – הוספת פודקאסט לפי <strong>כתובת RSS</strong> (הפיד נבדק לפני השמירה)</li>
   <li><strong>📥 / 📤</strong> – ייבוא וייצוא <strong>OPML</strong></li>
   <li>אחרי הרשמה מחיפוש: <strong>חזרה</strong> ממסך החיפוש מרעננת את רשימת המנויים מהשרת</li>
 </ul>
 
-<h3 dir="rtl" align="right">הורדה אוטומטית (אופציונלי)</h3>
-<p dir="rtl" align="right">בתפריט <strong>🎙 הסכתים</strong> → <strong>התקן טריגר אוטומטי (כל 6 שעות)</strong>. יורדים פרקים שפורסמו <strong>אחרי</strong> תאריך המנוי. להסרה: <strong>הסר טריגר אוטומטי</strong>.</p>
+<h3>הפעלת הורדה אוטומטית כל 6 שעות (אופציונלי)</h3>
+<p>בתפריט <strong>🎙 הסכתים</strong> → <strong>התקן טריגר אוטומטי (כל 6 שעות)</strong>. יורדים פרקים שפורסמו <strong>אחרי</strong> תאריך המנוי. להסרה: <strong>הסר טריגר אוטומטי</strong>.</p>
 
-<h3 dir="rtl" align="right">מבנה האחסון</h3>
-<table dir="rtl" align="right">
+<h3>איפה נשמרים המנויים, תיקיות ה־MP3 והלוג</h3>
+<table>
   <thead>
     <tr>
       <th>מיקום</th>
@@ -148,10 +150,12 @@ Menu **🎙 הסכתים** → **התקן טריגר אוטומטי (כל 6 שע
   </tbody>
 </table>
 
-<h3 dir="rtl" align="right">הערות טכניות</h3>
-<ul dir="rtl" align="right">
+<h3>מגבלות זמן ריצה, שמות קבצים ופתרון תקלות נפוצות</h3>
+<ul>
   <li><strong>שמות קבצים:</strong> <code>YYMMDD שם הפרק.mp3</code>. קבצים גדולים מחולקים: <code>YYMMDD שם (חלק 001).mp3</code> וכו'.</li>
   <li><strong>מגבלת 6 דקות:</strong> ריצה ארוכה שומרת מצב ומתזמנת המשך בערך אחרי 30 שניות. <code>lastRunTime</code> נכתב רק כשהריצה מסתיימת בהצלחה.</li>
   <li><strong>מחיקה בדרייב:</strong> אם מחקת קובץ מהדרייב, הסקריפט יכול לזהות שאין קובץ צפוי ולאפשר <strong>הורדה מחדש</strong>.</li>
   <li><strong>שגיאת PERMISSION_DENIED בסרגל:</strong> נסה <strong>חשבון גוגל יחיד</strong> בדפדפן (למשל <strong>חלון אנונימי</strong>) — לעיתים הבעיה נגרמת מכמה חשבונות מחוברים בו־זמנית.</li>
 </ul>
+
+</div>
