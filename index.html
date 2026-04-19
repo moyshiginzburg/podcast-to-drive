@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>מנהל הפודקאסטים האישי שלכם ב-Google Drive</title>
   <style>
-    /* הגדרות בסיס וצבעים */
+    /* Base settings and color variables */
     :root {
       --bg: #f8f9fa;
       --card: #ffffff;
@@ -27,12 +27,14 @@
       padding: 0;
     }
 
+    /* Layout structure */
     .container {
       max-width: 800px;
       margin: 40px auto;
       padding: 0 20px;
     }
 
+    /* Header styling */
     .header {
       text-align: center;
       margin-bottom: 40px;
@@ -50,6 +52,7 @@
       margin-top: 0;
     }
 
+    /* Card component */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
@@ -67,6 +70,7 @@
       font-size: 1.5rem;
     }
 
+    /* Highlight box for important notices */
     .highlight-box {
       background-color: var(--secondary);
       color: #1967d2;
@@ -77,6 +81,7 @@
       border-right: 4px solid var(--primary);
     }
 
+    /* Features list styling */
     .features-list {
       list-style-type: none;
       padding: 0;
@@ -97,6 +102,7 @@
       font-size: 1.2rem;
     }
 
+    /* Step-by-step installation guide */
     .steps-container {
       display: grid;
       gap: 20px;
@@ -152,6 +158,7 @@
       font-size: 1rem;
     }
 
+    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -186,6 +193,7 @@
       color: #fff;
     }
 
+    /* Success message / tips */
     .success-msg {
       background: #e6f4ea;
       color: #137333;
@@ -196,6 +204,25 @@
       font-weight: 500;
     }
 
+    /* Footer and links */
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-bottom: 40px;
+      color: #70757a;
+      font-size: 0.9rem;
+    }
+
+    .footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive adjustments */
     @media (max-width: 600px) {
       .container { padding: 0 16px; margin: 20px auto; }
       .header h1 { font-size: 2rem; }
@@ -207,6 +234,7 @@
 <body>
 
   <main class="container">
+    
     <header class="header">
       <h1>🎙 מנהל הפודקאסטים האישי שלכם</h1>
       <p>כל הפודקאסטים שאתם אוהבים, מסודרים אצלכם ב-Google Drive</p>
@@ -268,6 +296,11 @@
 
       </div>
     </section>
+
+    <footer class="footer">
+      <p>המערכת שקופה ומבוססת קוד פתוח. לביטחון מלא ועיון בקוד המקור, אתם מוזמנים לבקר ב- <a href="https://github.com/moyshiginzburg/podcast-to-drive" target="_blank">GitHub של הפרויקט</a>.</p>
+    </footer>
+
   </main>
 
 </body>
