@@ -17,8 +17,10 @@ const LEGACY_PROP_DOWNLOADED = 'downloadedUrls';
 const PROP_LAST_RUN = 'lastRunTime';
 const PROP_RESUME = 'resumeState';
 const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
-const CHUNK_SIZE = 40 * 1024 * 1024; // 40 MB
+const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
+const RUN_TIME_BUDGET_MS = 4 * 60 * 1000;
+const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
 
 // ============================================================
 // MENU & SIDEBAR
@@ -474,7 +476,7 @@ function setLogLinkCell(sheet, row, linkText) {
  * Returns array of { fileId, fileName, driveUrl } (one item for direct, multiple for chunked).
  * Throws on unrecoverable error.
  */
-function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, description) {
+function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, description, options) {
   const contentLength = fetchContentLength(episodeUrl);
 
   if (contentLength !== null && contentLength <= CHUNK_SIZE) {
@@ -483,11 +485,11 @@ function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, desc
   }
 
   if (contentLength !== null && contentLength > CHUNK_SIZE) {
-    return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, contentLength);
+    return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, contentLength, options);
   }
 
   // Unknown size: prefer chunked to avoid UrlFetch's 50MB direct-response limit.
-  return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null);
+  return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null, options);
 }
 
 function getHeaderCaseInsensitive(headers, key) {
@@ -641,12 +643,28 @@ function downloadDirect(url, fileName, folder, description) {
   };
 }
 
-function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, totalSize) {
+function buildTimeBudgetExceededError(offset, part) {
+  const err = new Error('TIME_BUDGET_EXCEEDED');
+  err.code = 'TIME_BUDGET_EXCEEDED';
+  err.resumeOffset = offset;
+  err.resumePart = part;
+  return err;
+}
+
+function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, totalSize, options) {
   const results = [];
-  let offset = 0;
-  let part = 1;
+  let offset = (options && typeof options.resumeOffset === 'number' && options.resumeOffset >= 0)
+    ? options.resumeOffset
+    : 0;
+  let part = (options && typeof options.resumePart === 'number' && options.resumePart > 0)
+    ? options.resumePart
+    : 1;
 
   while (true) {
+    if (options && typeof options.shouldStop === 'function' && options.shouldStop()) {
+      throw buildTimeBudgetExceededError(offset, part);
+    }
+
     const rangeEnd = totalSize
       ? Math.min(offset + CHUNK_SIZE - 1, totalSize - 1)
       : offset + CHUNK_SIZE - 1;
@@ -979,6 +997,7 @@ function podcastManager() {
   const props = PropertiesService.getScriptProperties();
   const startTime = Date.now();
   const downloadedSet = getDownloadedSet();
+  const shouldStop = () => Date.now() - startTime > RUN_TIME_BUDGET_MS;
 
   // 1. Remove any one-time trigger that scheduled this run
   deleteOneTimeTrigger();
@@ -989,6 +1008,13 @@ function podcastManager() {
   if (resumeRaw) {
     try { resumeState = JSON.parse(resumeRaw); } catch (_) { }
   }
+
+  const persistResumeAndSchedule = state => {
+    props.setProperty(PROP_RESUME, JSON.stringify(state));
+    const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(RESUME_TRIGGER_DELAY_MS).create();
+    props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
+    saveDownloadedSet(downloadedSet);
+  };
 
   const subs = getSubscriptions();
   const subEntries = Object.entries(subs);
@@ -1021,6 +1047,10 @@ function podcastManager() {
 
     const [rssUrl, subData] = subEntries[pi];
     const startEi_ = (pi === startPi) ? startEi : 0;
+    if (shouldStop()) {
+      persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
+      return;
+    }
 
     // Fetch RSS
     let episodes = [];
@@ -1040,33 +1070,54 @@ function podcastManager() {
       writeLog(subData.title, '—', 'שגיאת RSS', e.message);
       continue;
     }
+    if (shouldStop()) {
+      persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
+      return;
+    }
 
     for (let ei = startEi_; ei < episodes.length; ei++) {
+      const ep = episodes[ei];
+
       // ── Time check ──────────────────────────────────────────
-      if (Date.now() - startTime > 5.5 * 60 * 1000) {
-        props.setProperty(PROP_RESUME, JSON.stringify({ podcastUrl: rssUrl, episodeIndex: ei }));
-        const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(30 * 1000).create();
-        props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
-        saveDownloadedSet(downloadedSet);
+      if (shouldStop()) {
+        persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei, episodeUrl: ep.url });
         // Do NOT write lastRunTime – run is incomplete
         return;
       }
-
-      const ep = episodes[ei];
 
       const folderTitle = subs[rssUrl].title || subData.title;
       const pubDate = ep.date ? new Date(ep.date) : new Date();
       syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet);
       if (isDownloaded(ep.url, downloadedSet)) continue;
 
+      const isSameEpisodeResume = resumeState &&
+        resumeState.podcastUrl === rssUrl &&
+        resumeState.episodeUrl === ep.url;
+
       // ── Download ─────────────────────────────────────────────
       try {
         const folder = getPodcastFolder(folderTitle);
-        const results = downloadEpisodeToFolder(ep.url, ep.title, pubDate, folder, ep.description);
+        const results = downloadEpisodeToFolder(ep.url, ep.title, pubDate, folder, ep.description, {
+          shouldStop,
+          resumeOffset: isSameEpisodeResume ? resumeState.resumeOffset : null,
+          resumePart: isSameEpisodeResume ? resumeState.resumePart : null
+        });
         markDownloaded(ep.url, downloadedSet);
+        resumeState = null;
         const link = results.map(r => r.driveUrl).join('\n');
         writeLog(subs[rssUrl].title, ep.title, 'הורד אוטומטית', '', link);
       } catch (e) {
+        if (e && e.code === 'TIME_BUDGET_EXCEEDED') {
+          persistResumeAndSchedule({
+            podcastUrl: rssUrl,
+            podcastIndex: pi,
+            episodeIndex: ei,
+            episodeUrl: ep.url,
+            resumeOffset: e.resumeOffset,
+            resumePart: e.resumePart
+          });
+          return;
+        }
         const msg = e.message || '';
         if (msg.toLowerCase().includes('storage') || msg.toLowerCase().includes('quota')) {
           writeLog(subData.title, ep.title, 'שגיאה', 'Drive מלא – הורדה נכשלה');
