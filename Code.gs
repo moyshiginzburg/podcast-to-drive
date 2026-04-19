@@ -1310,3 +1310,51 @@ function getLastAutoRunLabel() {
   const text = Utilities.formatDate(new Date(ts), tz, 'dd/MM/yyyy HH:mm');
   return `הורדה אוטומטית אחרונה: ${text}`;
 }
+
+/**
+ * Purpose: One-time OAuth / permission confirmation step for the podcast manager script.
+ *   Running this triggers Apps Script authorization; after success, the user can use the menu.
+ * Operation: Shows a Hebrew alert confirming that permissions were granted and directing the user
+ *   to the spreadsheet menu (🎙 הסכתים). Pair with `createStartSheet` and a button that runs this.
+ */
+function authorizeAndInit() {
+  SpreadsheetApp.getUi().alert('✓ ההרשאות אושרו בהצלחה! כעת השתמש בתפריט 🎙 הסכתים למעלה.');
+}
+
+/**
+ * Purpose: Creates a welcome / onboarding sheet named "התחלה" so new users see Hebrew instructions
+ *   before using the podcast manager (including how to authorize the script once).
+ * Operation: Inserts the sheet at index 0 if missing, sets column/row sizes, writes title and
+ *   step-by-step text in column B, styles cells, and sets a green tab color to match the flow.
+ */
+function createStartSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss.getSheetByName('התחלה')) return;
+  const sheet = ss.insertSheet('התחלה', 0);
+
+  sheet.setColumnWidth(1, 30);
+  sheet.setColumnWidth(2, 400);
+  sheet.setRowHeight(1, 30);
+  sheet.setRowHeight(2, 60);
+  sheet.setRowHeight(3, 200);
+  sheet.setRowHeight(4, 60);
+
+  const titleRange = sheet.getRange('B2');
+  titleRange.setValue('🎙 ברוך הבא למנהל ההסכתים');
+  titleRange.setFontSize(18).setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle');
+
+  const instrRange = sheet.getRange('B3');
+  instrRange.setValue(
+    'לפני השימוש יש לאשר הרשאות גישה:\n\n' +
+    '① לחץ על הכפתור הירוק למטה\n' +
+    '② בחלון שייפתח — לחץ "Continue" ואשר את כל ההרשאות\n' +
+    '③ חזור לכאן — התפריט 🎙 הסכתים יהיה זמין'
+  );
+  instrRange.setFontSize(13).setWrap(true).setVerticalAlignment('middle');
+
+  const noteRange = sheet.getRange('B4');
+  noteRange.setValue('פעולה זו נדרשת פעם אחת בלבד.');
+  noteRange.setFontSize(11).setFontColor('#888888').setHorizontalAlignment('center');
+
+  sheet.setTabColor('#34A853');
+}

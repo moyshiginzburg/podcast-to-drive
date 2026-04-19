@@ -155,6 +155,7 @@
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       background: #fff;
       color: var(--primary);
       border: 1px solid var(--primary);
@@ -172,12 +173,15 @@
       background: var(--secondary);
     }
 
-    .btn-copy {
+    .btn-primary {
       background: var(--primary);
       color: #fff;
+      padding: 12px 24px;
+      font-size: 1.1rem;
+      border: none;
     }
 
-    .btn-copy:hover {
+    .btn-primary:hover {
       background: #1557b0;
       color: #fff;
     }
@@ -216,7 +220,7 @@
         🔒 <strong>הפרטיות שלכם נשמרת:</strong> הכל נשאר אצלכם. המערכת לא שולחת אף מידע לשרתים חיצוניים ואין צורך להירשם לשום שירות. היא פועלת מתוך גיליון האקסל שלכם (Google Sheets), וכל קבצי השמע נשמרים בתיקייה ייעודית בשם <code>הסכתים</code> בדרייב הפרטי שלכם.
       </div>
 
-      <p>לאחר התקנה פשוטה וחד-פעמית, יתווסף לגיליון שלכם תפריט שיאפשר לכם:</p>
+      <p>הכלי מאפשר לכם:</p>
       <ul class="features-list">
         <li>לחפש פודקאסטים ולהירשם אליהם בקלות.</li>
         <li>להוריד פרקים באופן ידני בלחיצת כפתור.</li>
@@ -226,69 +230,39 @@
     </section>
 
     <section class="card">
-      <h2>איך מתקינים? (מדריך צעד-אחר-צעד)</h2>
-      <p>ההתקנה לוקחת דקות ספורות ולא דורשת שום ידע קודם בתכנות. פשוט עקבו אחרי השלבים:</p>
+      <h2>איך מתקינים? (התקנה בקליק)</h2>
+      <p>ההתקנה פשוטה ומהירה, ולא דורשת שום ידע קודם. פשוט עקבו אחרי השלבים הבאים:</p>
 
       <div class="steps-container">
         
         <article class="step">
           <div class="step-header">
             <span class="step-number">1</span>
-            <h3 class="step-title">פותחים גיליון גוגל חדש</h3>
+            <h3 class="step-title">יצירת עותק אישי</h3>
           </div>
-          <p>היכנסו ל-Google Drive שלכם וצרו גיליון אלקטרוני חדש (Google Sheets). הגיליון הזה ישמש כלוח הבקרה שלכם.</p>
+          <p>לחצו על הכפתור הבא כדי לשכפל את המערכת ישירות לחשבון ה-Google Drive שלכם. תתבקשו לאשר את יצירת העותק למערכת.</p>
+          <div>
+            <a class="btn btn-primary" href="https://docs.google.com/spreadsheets/d/18zSpKULa8o8wIkx8k099Syaoh1mUVRz7xhcdm-T_k2c/copy" target="_blank">📥 צור עותק של המערכת</a>
+          </div>
         </article>
 
         <article class="step">
           <div class="step-header">
             <span class="step-number">2</span>
-            <h3 class="step-title">נכנסים לעורך הקוד</h3>
+            <h3 class="step-title">אישור הרשאות ראשוני</h3>
           </div>
-          <p>בתפריט העליון של הגיליון, לחצו על <strong>Extensions</strong> (או "תוספים" בעברית) ובחרו באפשרות <strong>Apps Script</strong>. ייפתח לכם חלון חדש.</p>
+          <p>לאחר פתיחת הגיליון, תראו מסך פתיחה בשם <strong>"התחלה"</strong> (זהו הגיליון היחיד שיופיע כרגע). לחצו על הכפתור הירוק המופיע שם כדי להתחיל בתהליך אישור הרשאות הגישה.</p>
+          <p>בחלון שייפתח — לחצו על "Continue" ואשרו את כל ההרשאות. (במידה ומופיעה אזהרת אבטחה של גוגל, לחצו על "מתקדם / Advanced" ואז "כניסה לפרויקט"). פעולה זו נדרשת פעם אחת בלבד!</p>
         </article>
 
         <article class="step">
           <div class="step-header">
             <span class="step-number">3</span>
-            <h3 class="step-title">מעתיקים את קובץ ההפעלה</h3>
-          </div>
-          <p>בחלון שנפתח, תראו קוד קצר שמופיע כברירת מחדל. מחקו אותו לחלוטין. במקומו, הדביקו את התוכן של הקובץ <code>Code.gs</code> שלנו.</p>
-          <div>
-            <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Code.gs" target="_blank">📄 פתח את Code.gs להעתקה</a>
-          </div>
-        </article>
-
-        <article class="step">
-          <div class="step-header">
-            <span class="step-number">4</span>
-            <h3 class="step-title">מוסיפים את חלון התצוגה</h3>
-          </div>
-          <p>בצד שמאל למעלה (מעל רשימת הקבצים), לחצו על סמל הפלוס (<strong>+</strong>) ובחרו ב-<strong>HTML</strong>. תנו לקובץ החדש את השם המדויק <code>Sidebar</code> (שימו לב לאותיות הגדולות). הדביקו פנימה את התוכן של הקובץ <code>Sidebar.html</code>.</p>
-          <div>
-            <button class="btn btn-copy" data-copy="Sidebar">העתק את השם: Sidebar</button>
-            <a class="btn" href="https://github.com/moyshiginzburg/podcast-to-drive/blob/main/Sidebar.html" target="_blank">🖼️ פתח את Sidebar.html להעתקה</a>
-          </div>
-        </article>
-
-        <article class="step">
-          <div class="step-header">
-            <span class="step-number">5</span>
-            <h3 class="step-title">שומרים ומאשרים</h3>
-          </div>
-          <p>לחצו על סמל השמירה (💾). לאחר מכן, בחלק העליון בחרו בפונקציה שנקראת <code>onOpen</code> מתוך הרשימה, ולחצו על הכפתור <strong>Run</strong> (הפעל). גוגל תבקש מכם לאשר הרשאות כדי לאפשר למערכת ליצור קבצים בדרייב שלכם – אשרו הכל ללא חשש (תחת מתקדם / Advanced).</p>
-          <div>
-            <button class="btn btn-copy" data-copy="onOpen">העתק את שם הפונקציה: onOpen</button>
-          </div>
-        </article>
-
-        <article class="step">
-          <div class="step-header">
-            <span class="step-number">6</span>
             <h3 class="step-title">סיימנו! מתחילים להוריד</h3>
           </div>
-          <p>סגרו את חלון הקוד וחזרו לגיליון האקסל שלכם. רעננו את הדף. כעת תראו בתפריט העליון כפתור חדש בשם <strong>🎙 הסכתים</strong>. לחצו עליו, בחרו ב"פתח מנהל הסכתים", ותתחילו לארגן את הפודקאסטים שלכם!</p>
+          <p>כעת התפריט העליון יתעדכן ויופיע כפתור חדש בשם <strong>🎙 הסכתים</strong>. לחצו עליו, בחרו ב"פתח מנהל הסכתים", ותתחילו לארגן את הפודקאסטים שלכם!</p>
           <div class="success-msg">
-            💡 טיפ: אם התפריט החדש לא מופיע מיד אחרי הרענון הראשון, המתינו כמה שניות ורעננו את הדף שוב.
+            💡 טיפ: שאר גיליונות המערכת יפתחו ויופיעו באופן אוטומטי מיד לאחר סיום תהליך אישור ההרשאות.
           </div>
         </article>
 
@@ -296,42 +270,5 @@
     </section>
   </main>
 
-  <script>
-    // סקריפט פשוט להעתקת טקסט מהכפתורים
-    function fallbackCopy(text) {
-      const area = document.createElement('textarea');
-      area.value = text;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.focus();
-      area.select();
-      document.execCommand('copy');
-      document.body.removeChild(area);
-    }
-
-    document.querySelectorAll('button[data-copy]').forEach((btn) => {
-      const originalText = btn.textContent;
-      btn.addEventListener('click', async () => {
-        const textToCopy = btn.getAttribute('data-copy') || '';
-        try {
-          if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(textToCopy);
-          } else {
-            fallbackCopy(textToCopy);
-          }
-          btn.textContent = 'הועתק בהצלחה! ✓';
-          btn.style.backgroundColor = '#137333';
-          setTimeout(() => { 
-            btn.textContent = originalText; 
-            btn.style.backgroundColor = '';
-          }, 2000);
-        } catch (e) {
-          btn.textContent = 'שגיאה בהעתקה';
-          setTimeout(() => { btn.textContent = originalText; }, 2000);
-        }
-      });
-    });
-  </script>
 </body>
 </html>
