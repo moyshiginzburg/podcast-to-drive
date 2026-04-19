@@ -1,5 +1,9 @@
 # Change log
 
+## 2026-04-19 (later)
+
+- **Auto vs manual “already downloaded”:** `syncDownloadedFlagWithDrive` (clear URL from `הורדות` when the MP3 is missing from Drive) runs only for **manual** sidebar downloads. **`podcastManager` (automatic / “הפעל הורדה עכשיו”)** no longer calls it, so deleting files to free space does not trigger automatic re-download; manual re-fetch still works when the file is gone.
+
 ## 2026-04-19
 
 - **Execution debug logging:** Added `debugStep` / `debugSnippet` helpers that write structured `[podcast]` lines via `console.log` (visible under Apps Script → Executions). Logs cover `podcastManager` flow, RSS fetch/parse, `fetchContentLength`, direct vs chunked downloads (including each Range part, `getContent`, Drive `createFile`), and sidebar `downloadEpisode`. Passes optional `runT0` so lines show elapsed milliseconds since run start.

@@ -398,7 +398,12 @@ function episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, pubDate, runT
   }
 }
 
-/** If the episode URL is marked downloaded but files were removed from Drive, clear the flag. */
+/**
+ * Manual downloads only: if the episode URL is marked downloaded but the expected file(s) are
+ * missing from Drive, clear the flag so the user can fetch again. Automatic `podcastManager` does
+ * not call this — the sheet URL list is the source of truth for auto runs (deleting files to free
+ * space will not queue a re-download).
+ */
 function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, downloadedSet, runT0) {
   if (!isDownloaded(url, downloadedSet)) return;
   debugStep('syncDownloadedFlagWithDrive: check', debugSnippet(episodeTitle, 80), runT0);
@@ -1219,7 +1224,7 @@ function podcastManager() {
         `ei=${ei} ` + debugSnippet(ep.title, 60),
         runT0
       );
-      syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet, runT0);
+      // No syncDownloadedFlagWithDrive here — auto skips by URL sheet alone (see comment on syncDownloadedFlagWithDrive).
       if (isDownloaded(ep.url, downloadedSet)) {
         debugStep('podcastManager: skip (already downloaded)', debugSnippet(ep.url, 100), runT0);
         checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
