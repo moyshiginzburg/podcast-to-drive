@@ -1,5 +1,9 @@
 # Change log
 
+## 2026-04-19
+
+- **Execution debug logging:** Added `debugStep` / `debugSnippet` helpers that write structured `[podcast]` lines via `console.log` (visible under Apps Script → Executions). Logs cover `podcastManager` flow, RSS fetch/parse, `fetchContentLength`, direct vs chunked downloads (including each Range part, `getContent`, Drive `createFile`), and sidebar `downloadEpisode`. Passes optional `runT0` so lines show elapsed milliseconds since run start.
+
 ## 2026-04-18
 
 - **README (Hebrew section):** Wrapped the Hebrew documentation in a single `<div dir="rtl">` so GitHub renders RTL layout without per-element alignment. Replaced generic section titles with headings that describe what each section covers (installation paths, sidebar actions, storage, troubleshooting).

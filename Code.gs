@@ -22,6 +22,25 @@ const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch respo
 const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
 
+/**
+ * Purpose: Structured lines in the Apps Script execution log (Executions) to trace where a run
+ *   spends time or stops. Remove or reduce once debugging is done.
+ * Operation: `console.log` with optional elapsed ms since `runT0` (set once per `podcastManager` /
+ *   manual download). Long strings are truncated to keep logs readable.
+ */
+function debugSnippet(text, maxLen) {
+  const s = String(text || '');
+  const n = maxLen != null ? maxLen : 120;
+  if (s.length <= n) return s;
+  return s.slice(0, n) + '…';
+}
+
+function debugStep(label, detail, runT0) {
+  const elapsed = runT0 != null ? `+${Date.now() - runT0}ms ` : '';
+  const tail = detail != null && detail !== '' ? ` | ${detail}` : '';
+  console.log(`[podcast] ${elapsed}${label}${tail}`);
+}
+
 // ============================================================
 // MENU & SIDEBAR
 // ============================================================
@@ -352,25 +371,37 @@ function unmarkDownloaded(url, set) {
  * Returns true if an audio file for this episode still exists in the podcast folder
  * (single file or first part of a chunked download).
  */
-function episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, pubDate) {
+function episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, pubDate, runT0) {
   try {
+    debugStep(
+      'episodeAudioFilesExistInDrive',
+      debugSnippet(podcastTitle, 60) + ' / ' + debugSnippet(episodeTitle, 60),
+      runT0
+    );
     const folder = getPodcastFolder(podcastTitle || 'כללי');
     const d = pubDate instanceof Date ? pubDate : new Date(pubDate || Date.now());
     const singleName = buildFileName(episodeTitle, d);
-    if (folder.getFilesByName(singleName).hasNext()) return true;
+    if (folder.getFilesByName(singleName).hasNext()) {
+      debugStep('episodeAudioFilesExistInDrive: found', singleName, runT0);
+      return true;
+    }
     const partName = buildFileName(episodeTitle, d, 1);
-    return folder.getFilesByName(partName).hasNext();
+    const hasPart = folder.getFilesByName(partName).hasNext();
+    debugStep('episodeAudioFilesExistInDrive: part1', partName + ' exists=' + hasPart, runT0);
+    return hasPart;
   } catch (_) {
     return true;
   }
 }
 
 /** If the episode URL is marked downloaded but files were removed from Drive, clear the flag. */
-function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, downloadedSet) {
+function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, downloadedSet, runT0) {
   if (!isDownloaded(url, downloadedSet)) return;
+  debugStep('syncDownloadedFlagWithDrive: check', debugSnippet(episodeTitle, 80), runT0);
   const d = pubDate instanceof Date ? pubDate : (pubDate ? new Date(pubDate) : new Date());
   if (isNaN(d.getTime())) return;
-  if (!episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, d)) {
+  if (!episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, d, runT0)) {
+    debugStep('syncDownloadedFlagWithDrive: unmark (missing file)', debugSnippet(url, 80), runT0);
     unmarkDownloaded(url, downloadedSet);
   }
 }
@@ -489,18 +520,27 @@ function setLogLinkCell(sheet, row, linkText) {
  * Throws on unrecoverable error.
  */
 function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, description, options) {
-  const contentLength = fetchContentLength(episodeUrl);
+  const runT0 = options && options.runT0;
+  debugStep(
+    'downloadEpisodeToFolder: start',
+    debugSnippet(episodeTitle, 80) + ' | ' + debugSnippet(episodeUrl, 120),
+    runT0
+  );
+  const contentLength = fetchContentLength(episodeUrl, runT0);
 
   if (contentLength !== null && contentLength <= CHUNK_SIZE) {
     const fileName = buildFileName(episodeTitle, pubDate);
-    return [downloadDirect(episodeUrl, fileName, folder, description)];
+    debugStep('downloadEpisodeToFolder: path=direct', 'file=' + debugSnippet(fileName, 100), runT0);
+    return [downloadDirect(episodeUrl, fileName, folder, description, runT0)];
   }
 
   if (contentLength !== null && contentLength > CHUNK_SIZE) {
+    debugStep('downloadEpisodeToFolder: path=chunked', 'totalSize=' + contentLength, runT0);
     return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, contentLength, options);
   }
 
   // Unknown size: prefer chunked to avoid UrlFetch's 50MB direct-response limit.
+  debugStep('downloadEpisodeToFolder: path=chunked (unknown size)', null, runT0);
   return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null, options);
 }
 
@@ -529,9 +569,10 @@ function parseTotalSizeFromContentRange(headers) {
   return isNaN(n) ? null : n;
 }
 
-function ensureFullResponseBytes(resp, context) {
+function ensureFullResponseBytes(resp, context, runT0) {
   const headers = resp.getHeaders() || {};
   const bytes = resp.getContent();
+  debugStep('ensureFullResponseBytes: ' + context, 'bytes=' + bytes.length, runT0);
   const actualSize = bytes.length;
   const declaredLength = parseContentLength(headers);
 
@@ -613,40 +654,59 @@ function normalizeFirstChunkDurationMetadata(bytes) {
   return normalized;
 }
 
-function fetchContentLength(url) {
+function fetchContentLength(url, runT0) {
+  debugStep('fetchContentLength: HEAD', debugSnippet(url, 120), runT0);
   try {
     const headResp = UrlFetchApp.fetch(url, {
       method: 'head',
       followRedirects: true,
       muteHttpExceptions: true
     });
+    debugStep('fetchContentLength: HEAD response', 'HTTP ' + headResp.getResponseCode(), runT0);
     const fromHead = parseContentLength(headResp.getHeaders());
-    if (fromHead !== null) return fromHead;
-  } catch (_) { }
+    if (fromHead !== null) {
+      debugStep('fetchContentLength: from HEAD', 'length=' + fromHead, runT0);
+      return fromHead;
+    }
+  } catch (e) {
+    debugStep('fetchContentLength: HEAD failed', e.message || String(e), runT0);
+  }
 
+  debugStep('fetchContentLength: Range probe', debugSnippet(url, 120), runT0);
   try {
     const probeResp = UrlFetchApp.fetch(url, {
       headers: { Range: 'bytes=0-0' },
       followRedirects: true,
       muteHttpExceptions: true
     });
+    debugStep('fetchContentLength: probe response', 'HTTP ' + probeResp.getResponseCode(), runT0);
     const headers = probeResp.getHeaders() || {};
     const fromRange = parseTotalSizeFromContentRange(headers);
-    if (fromRange !== null) return fromRange;
-    return parseContentLength(headers);
-  } catch (_) {
+    if (fromRange !== null) {
+      debugStep('fetchContentLength: from Content-Range', 'length=' + fromRange, runT0);
+      return fromRange;
+    }
+    const fromCl = parseContentLength(headers);
+    if (fromCl !== null) debugStep('fetchContentLength: from Content-Length', 'length=' + fromCl, runT0);
+    return fromCl;
+  } catch (e) {
+    debugStep('fetchContentLength: probe failed', e.message || String(e), runT0);
     return null;
   }
 }
 
-function downloadDirect(url, fileName, folder, description) {
+function downloadDirect(url, fileName, folder, description, runT0) {
+  debugStep('downloadDirect: UrlFetch start', debugSnippet(url, 120), runT0);
   const resp = UrlFetchApp.fetch(url, { followRedirects: true, muteHttpExceptions: true });
+  debugStep('downloadDirect: UrlFetch done', 'HTTP ' + resp.getResponseCode(), runT0);
   if (resp.getResponseCode() >= 400) {
     throw new Error(`HTTP ${resp.getResponseCode()} בעת הורדת הפרק`);
   }
-  const bytes = ensureFullResponseBytes(resp, 'הורדה ישירה נכשלה');
+  const bytes = ensureFullResponseBytes(resp, 'הורדה ישירה נכשלה', runT0);
   const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
+  debugStep('downloadDirect: createFile start', debugSnippet(fileName, 100), runT0);
   const file = folder.createFile(blob);
+  debugStep('downloadDirect: createFile done', 'id=' + file.getId(), runT0);
   if (description) file.setDescription(description);
   return {
     fileId: file.getId(),
@@ -664,6 +724,7 @@ function buildTimeBudgetExceededError(offset, part) {
 }
 
 function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, totalSize, options) {
+  const runT0 = options && options.runT0;
   const results = [];
   let offset = (options && typeof options.resumeOffset === 'number' && options.resumeOffset >= 0)
     ? options.resumeOffset
@@ -674,6 +735,7 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
 
   while (true) {
     if (options && typeof options.shouldStop === 'function' && options.shouldStop()) {
+      debugStep('downloadChunked: shouldStop before part', 'part=' + part + ' offset=' + offset, runT0);
       throw buildTimeBudgetExceededError(offset, part);
     }
 
@@ -681,6 +743,11 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       ? Math.min(offset + CHUNK_SIZE - 1, totalSize - 1)
       : offset + CHUNK_SIZE - 1;
 
+    debugStep(
+      'downloadChunked: UrlFetch Range',
+      `part=${part} bytes=${offset}-${rangeEnd}` + (totalSize != null ? ` of ${totalSize}` : ''),
+      runT0
+    );
     let resp;
     try {
       resp = UrlFetchApp.fetch(episodeUrl, {
@@ -693,14 +760,16 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
     }
 
     const code = resp.getResponseCode();
+    debugStep('downloadChunked: response', 'part=' + part + ' HTTP ' + code, runT0);
 
     // Server returned 200 instead of 206 → doesn't support Range
     if (code === 200) {
       if (part === 1) {
         // We got the whole file in one shot – save it
         const fileName = buildFileName(episodeTitle, pubDate);
-        const bytes = ensureFullResponseBytes(resp, 'השרת לא תמך ב-Range והחזיר תגובה חלקית');
+        const bytes = ensureFullResponseBytes(resp, 'השרת לא תמך ב-Range והחזיר תגובה חלקית', runT0);
         const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
+        debugStep('downloadChunked: createFile (200 full)', debugSnippet(fileName, 100), runT0);
         const file = folder.createFile(blob);
         if (description) file.setDescription(description);
         return [{
@@ -717,13 +786,19 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       throw new Error(`HTTP ${code} בחלק ${part}`);
     }
 
+    debugStep('downloadChunked: getContent start', 'part=' + part, runT0);
     let bytes = resp.getContent();
+    debugStep('downloadChunked: getContent done', 'part=' + part + ' len=' + bytes.length, runT0);
     if (part === 1) {
+      debugStep('downloadChunked: normalizeFirstChunkDurationMetadata', 'part=1', runT0);
       bytes = normalizeFirstChunkDurationMetadata(bytes);
+      debugStep('downloadChunked: normalizeFirstChunkDurationMetadata done', 'len=' + bytes.length, runT0);
     }
     const fileName = buildFileName(episodeTitle, pubDate, part);
     const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
+    debugStep('downloadChunked: createFile start', 'part=' + part + ' ' + debugSnippet(fileName, 100), runT0);
     const file = folder.createFile(blob);
+    debugStep('downloadChunked: createFile done', 'part=' + part + ' id=' + file.getId(), runT0);
     if (description) file.setDescription(`${description ? description + ' ' : ''}(חלק ${part})`);
 
     results.push({
@@ -741,6 +816,7 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
     part++;
   }
 
+  debugStep('downloadChunked: finished', 'parts=' + results.length, runT0);
   return results;
 }
 
@@ -752,14 +828,20 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
  * Parses an RSS feed and returns { title, imageUrl, episodes[] }
  * episodes: { title, date, description, url }
  */
-function parseRSS(xmlUrl) {
+function parseRSS(xmlUrl, runT0) {
+  debugStep('parseRSS: UrlFetch start', debugSnippet(xmlUrl, 200), runT0);
   const resp = UrlFetchApp.fetch(xmlUrl, { followRedirects: true, muteHttpExceptions: true });
+  debugStep('parseRSS: UrlFetch done', 'HTTP ' + resp.getResponseCode(), runT0);
   if (resp.getResponseCode() >= 400) {
     throw new Error(`לא ניתן לטעון RSS: HTTP ${resp.getResponseCode()}`);
   }
 
-  const feed = sanitizeXmlForParsing(resp.getContentText());
+  const rawText = resp.getContentText();
+  debugStep('parseRSS: body length', String(rawText.length) + ' chars', runT0);
+  const feed = sanitizeXmlForParsing(rawText);
+  debugStep('parseRSS: XmlService.parse start', null, runT0);
   const doc = XmlService.parse(feed);
+  debugStep('parseRSS: XmlService.parse done', null, runT0);
   const root = doc.getRootElement();
   const channel = root.getChild('channel');
   if (!channel) throw new Error('פורמט RSS לא תקין – חסר אלמנט channel');
@@ -799,6 +881,7 @@ function parseRSS(xmlUrl) {
     };
   }).filter(Boolean);
 
+  debugStep('parseRSS: items', String(episodes.length) + ' episodes', runT0);
   return { title: podcastTitle, imageUrl, episodes };
 }
 
@@ -826,20 +909,26 @@ function fetchEpisodeList(rssUrl) {
 /** Manually downloads one episode from sidebar */
 function downloadEpisode(episodeData) {
   // episodeData: { url, title, date, description, podcastTitle }
+  let runT0;
   try {
     if (!episodeData || !episodeData.url) {
       return { success: false, error: 'נתוני הפרק חסרים' };
     }
 
+    runT0 = Date.now();
+    debugStep('downloadEpisode (sidebar): start', debugSnippet(episodeData.url, 150), runT0);
     const pubDate = episodeData.date ? new Date(episodeData.date) : new Date();
     syncDownloadedFlagWithDrive(
       episodeData.url,
       episodeData.podcastTitle || 'כללי',
       episodeData.title || 'פרק',
-      pubDate
+      pubDate,
+      undefined,
+      runT0
     );
 
     if (isDownloaded(episodeData.url)) {
+      debugStep('downloadEpisode (sidebar): already in downloaded set', null, runT0);
       return { success: false, alreadyDownloaded: true, error: 'הפרק כבר הורד בעבר' };
     }
 
@@ -851,15 +940,18 @@ function downloadEpisode(episodeData) {
       episodeData.title || 'פרק',
       pubDate,
       folder,
-      description
+      description,
+      { runT0 }
     );
 
     markDownloaded(episodeData.url);
     const link = results.map(r => r.driveUrl).join('\n');
     writeLog(episodeData.podcastTitle || '', episodeData.title || '', 'הורד ידנית', '', link);
+    debugStep('downloadEpisode (sidebar): success', 'files=' + results.length, runT0);
 
     return { success: true, files: results };
   } catch (e) {
+    debugStep('downloadEpisode (sidebar): catch', (e.message || String(e)).slice(0, 200), runT0);
     const isDriveFull = (e.message || '').toLowerCase().includes('storage');
     const isRangeUnsupported = (e.message || '').includes('Range requests');
     const isUrlFetchLimit = (e.message || '').includes('מגבלת UrlFetch');
@@ -1008,11 +1100,15 @@ function exportOPML() {
 function podcastManager() {
   const props = PropertiesService.getScriptProperties();
   const startTime = Date.now();
+  const runT0 = startTime;
+  debugStep('podcastManager: start', null, runT0);
   const downloadedSet = getDownloadedSet();
+  debugStep('podcastManager: downloaded URL set', 'size=' + downloadedSet.size, runT0);
   const shouldStop = () => Date.now() - startTime >= SOFT_STOP_MS;
   let stopRequested = false;
   let resumeTriggerScheduled = false;
   deleteOneTimeTrigger();
+  debugStep('podcastManager: deleteOneTimeTrigger done', null, runT0);
 
   // 2. Load resume state (if rescheduled)
   let resumeState = null;
@@ -1020,24 +1116,37 @@ function podcastManager() {
   if (resumeRaw) {
     try { resumeState = JSON.parse(resumeRaw); } catch (_) { }
   }
+  if (resumeState) {
+    debugStep('podcastManager: resume state', debugSnippet(JSON.stringify(resumeState), 300), runT0);
+  } else {
+    debugStep('podcastManager: no resume state', null, runT0);
+  }
 
   const checkpointProgress = (state, persistDownloads) => {
+    debugStep('podcastManager: checkpoint', (persistDownloads ? 'persist ' : '') + debugSnippet(JSON.stringify(state), 200), runT0);
     props.setProperty(PROP_RESUME, JSON.stringify(state));
-    if (persistDownloads) saveDownloadedSet(downloadedSet);
+    if (persistDownloads) {
+      saveDownloadedSet(downloadedSet);
+      debugStep('podcastManager: saveDownloadedSet done', 'size=' + downloadedSet.size, runT0);
+    }
   };
 
   const requestSoftStop = (state, persistDownloads) => {
+    debugStep('podcastManager: requestSoftStop (soft time budget)', debugSnippet(JSON.stringify(state), 250), runT0);
     checkpointProgress(state, persistDownloads);
     if (!resumeTriggerScheduled) {
       ensureOneTimeTrigger(RESUME_TRIGGER_DELAY_MS);
       resumeTriggerScheduled = true;
+      debugStep('podcastManager: scheduled one-time resume trigger', String(RESUME_TRIGGER_DELAY_MS) + 'ms', runT0);
     }
     stopRequested = true;
   };
 
   const subs = getSubscriptions();
   const subEntries = Object.entries(subs);
+  debugStep('podcastManager: active subscriptions', 'count=' + subEntries.length, runT0);
   if (subEntries.length === 0) {
+    debugStep('podcastManager: exit (no subscriptions)', null, runT0);
     saveDownloadedSet(downloadedSet);
     props.deleteProperty(PROP_RESUME);
     deleteOneTimeTrigger();
@@ -1067,6 +1176,11 @@ function podcastManager() {
 
     const [rssUrl, subData] = subEntries[pi];
     const startEi_ = (pi === startPi) ? startEi : 0;
+    debugStep(
+      'podcastManager: podcast loop',
+      `pi=${pi}/${subEntries.length} ` + debugSnippet(subData.title || rssUrl, 80),
+      runT0
+    );
     if (shouldStop()) {
       requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 }, false);
       break;
@@ -1075,7 +1189,7 @@ function podcastManager() {
     // Fetch RSS
     let episodes = [];
     try {
-      const parsed = parseRSS(rssUrl);
+      const parsed = parseRSS(rssUrl, runT0);
       // Update cached title if podcast renamed itself
       if (parsed.title && parsed.title !== subData.title) {
         subs[rssUrl].title = parsed.title;
@@ -1086,7 +1200,9 @@ function podcastManager() {
         const ts = new Date(ep.date).getTime();
         return !isNaN(ts) && ts > (subData.subscribeDate || 0);
       });
+      debugStep('podcastManager: episodes after date filter', 'count=' + episodes.length, runT0);
     } catch (e) {
+      debugStep('podcastManager: parseRSS failed', e.message || String(e), runT0);
       writeLog(subData.title, '—', 'שגיאת RSS', e.message);
       continue;
     }
@@ -1106,8 +1222,14 @@ function podcastManager() {
 
       const folderTitle = subs[rssUrl].title || subData.title;
       const pubDate = ep.date ? new Date(ep.date) : new Date();
-      syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet);
+      debugStep(
+        'podcastManager: episode',
+        `ei=${ei} ` + debugSnippet(ep.title, 60),
+        runT0
+      );
+      syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet, runT0);
       if (isDownloaded(ep.url, downloadedSet)) {
+        debugStep('podcastManager: skip (already downloaded)', debugSnippet(ep.url, 100), runT0);
         checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
         continue;
       }
@@ -1115,21 +1237,28 @@ function podcastManager() {
       const isSameEpisodeResume = resumeState &&
         resumeState.podcastUrl === rssUrl &&
         resumeState.episodeUrl === ep.url;
+      if (isSameEpisodeResume) {
+        debugStep('podcastManager: resuming same episode', 'offset=' + (resumeState.resumeOffset || 0), runT0);
+      }
 
       // ── Download ─────────────────────────────────────────────
       try {
+        debugStep('podcastManager: getPodcastFolder', debugSnippet(folderTitle, 80), runT0);
         const folder = getPodcastFolder(folderTitle);
         const results = downloadEpisodeToFolder(ep.url, ep.title, pubDate, folder, ep.description, {
           shouldStop,
+          runT0,
           resumeOffset: isSameEpisodeResume ? resumeState.resumeOffset : null,
           resumePart: isSameEpisodeResume ? resumeState.resumePart : null
         });
+        debugStep('podcastManager: download OK', 'files=' + results.length, runT0);
         markDownloaded(ep.url, downloadedSet);
         resumeState = null;
         const link = results.map(r => r.driveUrl).join('\n');
         writeLog(subs[rssUrl].title, ep.title, 'הורד אוטומטית', '', link);
         checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, true);
       } catch (e) {
+        debugStep('podcastManager: download error', (e.message || String(e)).slice(0, 200), runT0);
         if (e && e.code === 'TIME_BUDGET_EXCEEDED') {
           requestSoftStop({
             podcastUrl: rssUrl,
@@ -1160,11 +1289,16 @@ function podcastManager() {
     checkpointProgress({ podcastIndex: pi + 1, episodeIndex: 0 }, false);
   }
 
-  if (stopRequested) return;
+  if (stopRequested) {
+    debugStep('podcastManager: exit (stopRequested / resume scheduled)', null, runT0);
+    return;
+  }
 
   // 3. Save updated metadata and downloaded URL set
+  debugStep('podcastManager: syncActiveSubscriptionsMetadata', null, runT0);
   syncActiveSubscriptionsMetadata(subs);
   saveDownloadedSet(downloadedSet);
+  debugStep('podcastManager: final saveDownloadedSet', 'size=' + downloadedSet.size, runT0);
 
   // 4. Run completed – clear resume state and update last successful auto-run timestamp
   props.deleteProperty(PROP_RESUME);
@@ -1172,6 +1306,7 @@ function podcastManager() {
   if (!driveFull) {
     props.setProperty(PROP_LAST_RUN, String(Date.now()));
   }
+  debugStep('podcastManager: completed OK', null, runT0);
 }
 
 function getLastAutoRunLabel() {
