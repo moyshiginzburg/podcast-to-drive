@@ -21,6 +21,7 @@ const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const RUN_TIME_BUDGET_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
+const RUN_GUARD_TRIGGER_DELAY_MS = 7 * 60 * 1000;
 
 // ============================================================
 // MENU & SIDEBAR
@@ -998,6 +999,10 @@ function podcastManager() {
   const startTime = Date.now();
   const downloadedSet = getDownloadedSet();
   const shouldStop = () => Date.now() - startTime > RUN_TIME_BUDGET_MS;
+  const scheduleOneTimeTrigger = delayMs => {
+    const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(delayMs).create();
+    props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
+  };
 
   // 1. Remove any one-time trigger that scheduled this run
   deleteOneTimeTrigger();
@@ -1011,8 +1016,8 @@ function podcastManager() {
 
   const persistResumeAndSchedule = state => {
     props.setProperty(PROP_RESUME, JSON.stringify(state));
-    const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(RESUME_TRIGGER_DELAY_MS).create();
-    props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
+    deleteOneTimeTrigger();
+    scheduleOneTimeTrigger(RESUME_TRIGGER_DELAY_MS);
     saveDownloadedSet(downloadedSet);
   };
 
@@ -1024,6 +1029,9 @@ function podcastManager() {
     props.setProperty(PROP_LAST_RUN, String(Date.now()));
     return;
   }
+
+  // Guard trigger: if runtime crashes before explicit reschedule, this ensures continuation.
+  scheduleOneTimeTrigger(RUN_GUARD_TRIGGER_DELAY_MS);
 
   let startPi = 0;
   let startEi = 0;
@@ -1139,6 +1147,7 @@ function podcastManager() {
 
   // 4. Run completed – clear resume state and update last successful auto-run timestamp
   props.deleteProperty(PROP_RESUME);
+  deleteOneTimeTrigger();
   if (!driveFull) {
     props.setProperty(PROP_LAST_RUN, String(Date.now()));
   }
