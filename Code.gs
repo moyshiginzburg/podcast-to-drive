@@ -19,9 +19,8 @@ const PROP_RESUME = 'resumeState';
 const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
 const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
-const RUN_TIME_BUDGET_MS = 4 * 60 * 1000;
+const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
-const RUN_GUARD_TRIGGER_DELAY_MS = 7 * 60 * 1000;
 
 // ============================================================
 // MENU & SIDEBAR
@@ -76,6 +75,18 @@ function deleteOneTimeTrigger() {
     .filter(t => t.getUniqueId() === id)
     .forEach(t => ScriptApp.deleteTrigger(t));
   props.deleteProperty(PROP_ONE_TIME_TRIG);
+}
+
+function ensureOneTimeTrigger(delayMs) {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty(PROP_ONE_TIME_TRIG);
+  if (id) {
+    const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === id);
+    if (exists) return;
+    props.deleteProperty(PROP_ONE_TIME_TRIG);
+  }
+  const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(delayMs).create();
+  props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
 }
 
 // ============================================================
@@ -998,13 +1009,9 @@ function podcastManager() {
   const props = PropertiesService.getScriptProperties();
   const startTime = Date.now();
   const downloadedSet = getDownloadedSet();
-  const shouldStop = () => Date.now() - startTime > RUN_TIME_BUDGET_MS;
-  const scheduleOneTimeTrigger = delayMs => {
-    const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(delayMs).create();
-    props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
-  };
-
-  // 1. Remove any one-time trigger that scheduled this run
+  const shouldStop = () => Date.now() - startTime >= SOFT_STOP_MS;
+  let stopRequested = false;
+  let resumeTriggerScheduled = false;
   deleteOneTimeTrigger();
 
   // 2. Load resume state (if rescheduled)
@@ -1014,11 +1021,18 @@ function podcastManager() {
     try { resumeState = JSON.parse(resumeRaw); } catch (_) { }
   }
 
-  const persistResumeAndSchedule = state => {
+  const checkpointProgress = (state, persistDownloads) => {
     props.setProperty(PROP_RESUME, JSON.stringify(state));
-    deleteOneTimeTrigger();
-    scheduleOneTimeTrigger(RESUME_TRIGGER_DELAY_MS);
-    saveDownloadedSet(downloadedSet);
+    if (persistDownloads) saveDownloadedSet(downloadedSet);
+  };
+
+  const requestSoftStop = (state, persistDownloads) => {
+    checkpointProgress(state, persistDownloads);
+    if (!resumeTriggerScheduled) {
+      ensureOneTimeTrigger(RESUME_TRIGGER_DELAY_MS);
+      resumeTriggerScheduled = true;
+    }
+    stopRequested = true;
   };
 
   const subs = getSubscriptions();
@@ -1026,12 +1040,10 @@ function podcastManager() {
   if (subEntries.length === 0) {
     saveDownloadedSet(downloadedSet);
     props.deleteProperty(PROP_RESUME);
+    deleteOneTimeTrigger();
     props.setProperty(PROP_LAST_RUN, String(Date.now()));
     return;
   }
-
-  // Guard trigger: if runtime crashes before explicit reschedule, this ensures continuation.
-  scheduleOneTimeTrigger(RUN_GUARD_TRIGGER_DELAY_MS);
 
   let startPi = 0;
   let startEi = 0;
@@ -1056,8 +1068,8 @@ function podcastManager() {
     const [rssUrl, subData] = subEntries[pi];
     const startEi_ = (pi === startPi) ? startEi : 0;
     if (shouldStop()) {
-      persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
-      return;
+      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 }, false);
+      break;
     }
 
     // Fetch RSS
@@ -1079,8 +1091,8 @@ function podcastManager() {
       continue;
     }
     if (shouldStop()) {
-      persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
-      return;
+      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 }, false);
+      break;
     }
 
     for (let ei = startEi_; ei < episodes.length; ei++) {
@@ -1088,15 +1100,17 @@ function podcastManager() {
 
       // ── Time check ──────────────────────────────────────────
       if (shouldStop()) {
-        persistResumeAndSchedule({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei, episodeUrl: ep.url });
-        // Do NOT write lastRunTime – run is incomplete
-        return;
+        requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei, episodeUrl: ep.url }, false);
+        break;
       }
 
       const folderTitle = subs[rssUrl].title || subData.title;
       const pubDate = ep.date ? new Date(ep.date) : new Date();
       syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet);
-      if (isDownloaded(ep.url, downloadedSet)) continue;
+      if (isDownloaded(ep.url, downloadedSet)) {
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
+        continue;
+      }
 
       const isSameEpisodeResume = resumeState &&
         resumeState.podcastUrl === rssUrl &&
@@ -1114,17 +1128,18 @@ function podcastManager() {
         resumeState = null;
         const link = results.map(r => r.driveUrl).join('\n');
         writeLog(subs[rssUrl].title, ep.title, 'הורד אוטומטית', '', link);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, true);
       } catch (e) {
         if (e && e.code === 'TIME_BUDGET_EXCEEDED') {
-          persistResumeAndSchedule({
+          requestSoftStop({
             podcastUrl: rssUrl,
             podcastIndex: pi,
             episodeIndex: ei,
             episodeUrl: ep.url,
             resumeOffset: e.resumeOffset,
             resumePart: e.resumePart
-          });
-          return;
+          }, true);
+          break;
         }
         const msg = e.message || '';
         if (msg.toLowerCase().includes('storage') || msg.toLowerCase().includes('quota')) {
@@ -1134,12 +1149,18 @@ function podcastManager() {
         }
         if (msg.includes('Range requests') || msg.includes('מגבלת UrlFetch')) {
           writeLog(subData.title, ep.title, 'דילוג', 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך בחלוקה לחלקים (Range)');
+          checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
           continue;
         }
         writeLog(subData.title, ep.title, 'שגיאה', msg);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
       }
     }
+    if (stopRequested) break;
+    checkpointProgress({ podcastIndex: pi + 1, episodeIndex: 0 }, false);
   }
+
+  if (stopRequested) return;
 
   // 3. Save updated metadata and downloaded URL set
   syncActiveSubscriptionsMetadata(subs);
