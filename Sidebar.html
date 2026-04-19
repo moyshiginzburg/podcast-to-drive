@@ -114,17 +114,34 @@
   }
   .search-go-btn:hover { background: #1558b0; }
 
+  #status-strip {
+    padding: 6px 10px;
+    background: #e8f0fe;
+    color: #1558b0;
+    border-bottom: 1px solid #d2e3fc;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
   /* ── Podcast list ── */
+  #podcasts-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
   .podcast-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 6px;
+    padding: 8px;
     border-radius: 6px;
     cursor: pointer;
-    border-bottom: 1px solid #efefef;
+    border: 1px solid #e0e0e0;
+    background: #fff;
     transition: background 0.1s;
     position: relative;
+    min-height: 56px;
   }
   .podcast-item:hover { background: #e8f0fe; }
   .podcast-thumb {
@@ -177,16 +194,25 @@
   .episode-header {
     padding: 8px 10px;
   }
+  .episode-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
   .episode-title {
     font-weight: 500;
     font-size: 12px;
     line-height: 1.4;
-    margin-bottom: 2px;
+    margin-bottom: 0;
+    flex: 1;
   }
   .episode-date {
     font-size: 11px;
     color: #888;
-    margin-bottom: 5px;
+    margin-bottom: 0;
+    white-space: nowrap;
   }
   .episode-desc {
     font-size: 11px;
@@ -380,6 +406,7 @@
   <input type="text" id="search-input" placeholder="חפש פודקאסט...">
   <button class="search-go-btn" id="btn-search-go">חפש</button>
 </div>
+<div id="status-strip">הורדה אוטומטית אחרונה: טרם בוצעה</div>
 
 <!-- ══ Main content ═════════════════════════════════════════ -->
 <div id="content">
@@ -456,7 +483,7 @@ function showScreen(id) {
 function loadPodcastList() {
   showScreen('screen-podcasts');
   const container = document.getElementById('podcasts-list');
-  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>טוען...</div>`;
+  container.innerHTML = `<div class="empty-msg" style="grid-column:1 / -1;"><span class="spinner"></span><br>טוען...</div>`;
 
   google.script.run
     .withSuccessHandler(list => {
@@ -472,7 +499,7 @@ function loadPodcastList() {
 function renderPodcastList() {
   const container = document.getElementById('podcasts-list');
   if (subscriptions.length === 0) {
-    container.innerHTML = `<div class="empty-msg">
+    container.innerHTML = `<div class="empty-msg" style="grid-column:1 / -1;">
       אין מנויים עדיין.<br>לחץ 🔍 לחיפוש, 🔗 להזנת כתובת RSS,<br>או 📥 לייבוא OPML.
     </div>`;
     return;
@@ -559,8 +586,10 @@ function renderEpisodes(episodes) {
 
     item.innerHTML = `
       <div class="episode-header">
-        <div class="episode-title">${escHtml(ep.title)}</div>
-        ${dateStr ? `<div class="episode-date">${escHtml(dateStr)}</div>` : ''}
+        <div class="episode-title-row">
+          <div class="episode-title">${escHtml(ep.title)}</div>
+          ${dateStr ? `<div class="episode-date">${escHtml(dateStr)}</div>` : ''}
+        </div>
         ${hasDesc ? `<div class="episode-desc" id="desc-${idx}">${escHtml(ep.description)}</div>` : ''}
       </div>
       <div class="episode-footer">
@@ -824,6 +853,18 @@ function doExport() {
     .exportOPML();
 }
 
+function loadLastAutoRunLabel() {
+  const el = document.getElementById('status-strip');
+  google.script.run
+    .withSuccessHandler(text => {
+      el.textContent = text || 'הורדה אוטומטית אחרונה: טרם בוצעה';
+    })
+    .withFailureHandler(() => {
+      el.textContent = 'הורדה אוטומטית אחרונה: טרם בוצעה';
+    })
+    .getLastAutoRunLabel();
+}
+
 // ══════════════════════════════════════════════════════════════
 // BANNER / NOTICE
 // ══════════════════════════════════════════════════════════════
@@ -908,6 +949,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Initial load
+  loadLastAutoRunLabel();
   loadPodcastList();
 });
 </script>

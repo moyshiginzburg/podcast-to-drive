@@ -6,8 +6,14 @@
 // --- Constants ---
 const ROOT_FOLDER_NAME = 'הסכתים';
 const LOG_SHEET_NAME = 'Log';
-const PROP_SUBSCRIPTIONS = 'subscriptions';
-const PROP_DOWNLOADED = 'downloadedUrls';
+const SUBSCRIPTIONS_SHEET_NAME = 'מנויים';
+const DOWNLOADS_SHEET_NAME = 'הורדות';
+const SUBSCRIPTIONS_HEADERS = ['כתובת RSS', 'שם', 'תמונה', 'תאריך הרשמה', 'סטטוס'];
+const DOWNLOADS_HEADERS = ['כתובת'];
+const STATUS_ACTIVE = 'פעיל';
+const STATUS_CANCELLED = 'בוטל';
+const LEGACY_PROP_SUBSCRIPTIONS = 'subscriptions';
+const LEGACY_PROP_DOWNLOADED = 'downloadedUrls';
 const PROP_LAST_RUN = 'lastRunTime';
 const PROP_RESUME = 'resumeState';
 const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
@@ -31,8 +37,10 @@ function onOpen() {
 
 function showSidebar() {
   const html = HtmlService.createHtmlOutputFromFile('Sidebar')
-    .setTitle('🎙 מנהל הסכתים');
-  SpreadsheetApp.getUi().showSidebar(html);
+    .setTitle('🎙 מנהל הסכתים')
+    .setWidth(720)
+    .setHeight(580);
+  SpreadsheetApp.getUi().showModalDialog(html, '🎙 מנהל הסכתים');
 }
 
 // ============================================================
@@ -71,38 +79,142 @@ function deleteOneTimeTrigger() {
 // SUBSCRIPTIONS
 // ============================================================
 
-function getSubscriptions() {
-  const raw = PropertiesService.getScriptProperties().getProperty(PROP_SUBSCRIPTIONS);
-  return raw ? JSON.parse(raw) : {};
+function ensureSheetWithHeaders(sheetName, headers) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
 }
 
-function saveSubscriptions(subs) {
-  PropertiesService.getScriptProperties().setProperty(
-    PROP_SUBSCRIPTIONS, JSON.stringify(subs)
-  );
+function getSubscriptionsSheet() {
+  const sheet = ensureSheetWithHeaders(SUBSCRIPTIONS_SHEET_NAME, SUBSCRIPTIONS_HEADERS);
+  migrateLegacySubscriptionsToSheet(sheet);
+  return sheet;
+}
+
+function migrateLegacySubscriptionsToSheet(sheet) {
+  if (sheet.getLastRow() > 1) return;
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty(LEGACY_PROP_SUBSCRIPTIONS);
+  if (!raw) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    return;
+  }
+  const entries = Object.entries(parsed || {});
+  if (entries.length === 0) {
+    props.deleteProperty(LEGACY_PROP_SUBSCRIPTIONS);
+    return;
+  }
+  const rows = entries.map(([url, data]) => ([
+    url,
+    (data && data.title) || url,
+    (data && data.imageUrl) || '',
+    data && data.subscribeDate ? new Date(data.subscribeDate) : new Date(),
+    STATUS_ACTIVE
+  ]));
+  sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+  props.deleteProperty(LEGACY_PROP_SUBSCRIPTIONS);
+}
+
+function parseSubscribeDate(value) {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (value == null || value === '') return 0;
+  const parsed = new Date(value).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function getSubscriptionRows() {
+  const sheet = getSubscriptionsSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  return values.map((row, idx) => ({
+    rowIndex: idx + 2,
+    url: String(row[0] || '').trim(),
+    title: String(row[1] || '').trim(),
+    imageUrl: String(row[2] || '').trim(),
+    subscribeDate: parseSubscribeDate(row[3]),
+    status: String(row[4] || '').trim()
+  })).filter(row => row.url);
+}
+
+function getSubscriptions() {
+  const activeRows = getSubscriptionRows().filter(row => row.status === STATUS_ACTIVE);
+  const subs = {};
+  activeRows.forEach(row => {
+    subs[row.url] = {
+      title: row.title || row.url,
+      imageUrl: row.imageUrl || '',
+      subscribeDate: row.subscribeDate || 0
+    };
+  });
+  return subs;
+}
+
+function syncActiveSubscriptionsMetadata(subs) {
+  const sheet = getSubscriptionsSheet();
+  const rows = getSubscriptionRows();
+  rows.forEach(row => {
+    if (row.status !== STATUS_ACTIVE) return;
+    const sub = subs[row.url];
+    if (!sub) return;
+    const nextTitle = sub.title || row.url;
+    const nextImage = sub.imageUrl || '';
+    if (nextTitle !== row.title || nextImage !== row.imageUrl) {
+      sheet.getRange(row.rowIndex, 2, 1, 2).setValues([[nextTitle, nextImage]]);
+    }
+  });
 }
 
 /** Returns array of { url, title, imageUrl, subscribeDate } */
 function getSubscriptionsList() {
-  const subs = getSubscriptions();
-  return Object.entries(subs).map(([url, data]) => ({
-    url,
-    title: data.title || url,
-    imageUrl: data.imageUrl || '',
-    subscribeDate: data.subscribeDate || 0
-  }));
+  return getSubscriptionRows()
+    .filter(row => row.status === STATUS_ACTIVE)
+    .map(row => ({
+      url: row.url,
+      title: row.title || row.url,
+      imageUrl: row.imageUrl || '',
+      subscribeDate: row.subscribeDate || 0
+    }));
 }
 
 /** Called from sidebar – add a new subscription */
 function addSubscription(rssUrl, title, imageUrl) {
-  const subs = getSubscriptions();
-  if (subs[rssUrl]) return { success: false, message: 'כבר מנוי לפודקאסט זה' };
-  subs[rssUrl] = {
-    title: title || rssUrl,
-    imageUrl: imageUrl || '',
-    subscribeDate: Date.now()
-  };
-  saveSubscriptions(subs);
+  const url = String(rssUrl || '').trim();
+  if (!url) return { success: false, message: 'כתובת RSS חסרה' };
+
+  const sheet = getSubscriptionsSheet();
+  const rows = getSubscriptionRows();
+  const existing = rows.find(row => row.url === url);
+
+  if (existing && existing.status === STATUS_ACTIVE) {
+    return { success: false, message: 'כבר מנוי לפודקאסט זה' };
+  }
+
+  const values = [
+    url,
+    title || url,
+    imageUrl || '',
+    new Date(),
+    STATUS_ACTIVE
+  ];
+
+  if (existing) {
+    sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([values]);
+  } else {
+    sheet.appendRow(values);
+  }
+
   return { success: true };
 }
 
@@ -137,9 +249,13 @@ function addSubscriptionFromRssUrl(rssUrlInput) {
 
 /** Called from sidebar – remove a subscription */
 function removeSubscription(rssUrl) {
-  const subs = getSubscriptions();
-  delete subs[rssUrl];
-  saveSubscriptions(subs);
+  const url = String(rssUrl || '').trim();
+  const sheet = getSubscriptionsSheet();
+  const rows = getSubscriptionRows();
+  const row = rows.find(r => r.url === url && r.status === STATUS_ACTIVE);
+  if (row) {
+    sheet.getRange(row.rowIndex, 5).setValue(STATUS_CANCELLED);
+  }
   return { success: true };
 }
 
@@ -147,32 +263,75 @@ function removeSubscription(rssUrl) {
 // DOWNLOADED URL TRACKING
 // ============================================================
 
+function getDownloadsSheet() {
+  const sheet = ensureSheetWithHeaders(DOWNLOADS_SHEET_NAME, DOWNLOADS_HEADERS);
+  migrateLegacyDownloadsToSheet(sheet);
+  return sheet;
+}
+
+function migrateLegacyDownloadsToSheet(sheet) {
+  if (sheet.getLastRow() > 1) return;
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty(LEGACY_PROP_DOWNLOADED);
+  if (!raw) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    return;
+  }
+  const rows = (Array.isArray(parsed) ? parsed : []).map(url => [String(url || '').trim()]).filter(r => r[0]);
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, 1).setValues(rows);
+  }
+  props.deleteProperty(LEGACY_PROP_DOWNLOADED);
+}
+
 function getDownloadedSet() {
-  const raw = PropertiesService.getScriptProperties().getProperty(PROP_DOWNLOADED);
-  return raw ? new Set(JSON.parse(raw)) : new Set();
+  const sheet = getDownloadsSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return new Set();
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const urls = values.map(row => String(row[0] || '').trim()).filter(Boolean);
+  return new Set(urls);
 }
 
 function saveDownloadedSet(set) {
-  // Keep at most 10,000 entries to stay within the 500KB property limit
-  let arr = Array.from(set);
-  if (arr.length > 10000) arr = arr.slice(arr.length - 10000);
-  PropertiesService.getScriptProperties().setProperty(PROP_DOWNLOADED, JSON.stringify(arr));
+  const sheet = getDownloadsSheet();
+  const arr = Array.from(set).filter(Boolean);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 1).clearContent();
+  }
+  if (arr.length > 0) {
+    const rows = arr.map(url => [url]);
+    sheet.getRange(2, 1, rows.length, 1).setValues(rows);
+  }
 }
 
-function markDownloaded(url) {
-  const set = getDownloadedSet();
-  set.add(url);
-  saveDownloadedSet(set);
+function markDownloaded(url, set) {
+  if (set) {
+    set.add(url);
+    return;
+  }
+  const downloaded = getDownloadedSet();
+  downloaded.add(url);
+  saveDownloadedSet(downloaded);
 }
 
-function isDownloaded(url) {
+function isDownloaded(url, set) {
+  if (set) return set.has(url);
   return getDownloadedSet().has(url);
 }
 
-function unmarkDownloaded(url) {
-  const set = getDownloadedSet();
-  if (!set.delete(url)) return;
-  saveDownloadedSet(set);
+function unmarkDownloaded(url, set) {
+  if (set) {
+    set.delete(url);
+    return;
+  }
+  const downloaded = getDownloadedSet();
+  if (!downloaded.delete(url)) return;
+  saveDownloadedSet(downloaded);
 }
 
 /**
@@ -193,12 +352,12 @@ function episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, pubDate) {
 }
 
 /** If the episode URL is marked downloaded but files were removed from Drive, clear the flag. */
-function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate) {
-  if (!isDownloaded(url)) return;
+function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, downloadedSet) {
+  if (!isDownloaded(url, downloadedSet)) return;
   const d = pubDate instanceof Date ? pubDate : (pubDate ? new Date(pubDate) : new Date());
   if (isNaN(d.getTime())) return;
   if (!episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, d)) {
-    unmarkDownloaded(url);
+    unmarkDownloaded(url, downloadedSet);
   }
 }
 
@@ -569,7 +728,7 @@ function parseRSS(xmlUrl) {
     throw new Error(`לא ניתן לטעון RSS: HTTP ${resp.getResponseCode()}`);
   }
 
-  const feed = resp.getContentText();
+  const feed = sanitizeXmlForParsing(resp.getContentText());
   const doc = XmlService.parse(feed);
   const root = doc.getRootElement();
   const channel = root.getChild('channel');
@@ -611,6 +770,13 @@ function parseRSS(xmlUrl) {
   }).filter(Boolean);
 
   return { title: podcastTitle, imageUrl, episodes };
+}
+
+function sanitizeXmlForParsing(xmlText) {
+  return String(xmlText || '').replace(
+    /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g,
+    '&amp;'
+  );
 }
 
 // ============================================================
@@ -713,7 +879,7 @@ function searchPodcasts(query) {
 
 function importOPML(opmlText) {
   try {
-    const doc = XmlService.parse(opmlText);
+    const doc = XmlService.parse(sanitizeXmlForParsing(opmlText));
     const root = doc.getRootElement();
     const body = root.getChild('body');
     if (!body) return { success: false, error: 'קובץ OPML לא תקין – חסר אלמנט body' };
@@ -725,23 +891,17 @@ function importOPML(opmlText) {
       return { success: false, error: 'לא נמצאו feeds בקובץ ה-OPML' };
     }
 
-    const subs = getSubscriptions();
     let added = 0, skipped = 0;
 
     feeds.forEach(feed => {
-      if (!subs[feed.url]) {
-        subs[feed.url] = {
-          title: feed.title || feed.url,
-          imageUrl: '',
-          subscribeDate: Date.now()
-        };
+      const result = addSubscription(feed.url, feed.title || feed.url, '');
+      if (result.success) {
         added++;
       } else {
         skipped++;
       }
     });
 
-    saveSubscriptions(subs);
     return { success: true, added, skipped };
   } catch (e) {
     return { success: false, error: `שגיאה בניתוח OPML: ${e.message}` };
@@ -818,6 +978,7 @@ function exportOPML() {
 function podcastManager() {
   const props = PropertiesService.getScriptProperties();
   const startTime = Date.now();
+  const downloadedSet = getDownloadedSet();
 
   // 1. Remove any one-time trigger that scheduled this run
   deleteOneTimeTrigger();
@@ -831,10 +992,27 @@ function podcastManager() {
 
   const subs = getSubscriptions();
   const subEntries = Object.entries(subs);
-  if (subEntries.length === 0) return;
+  if (subEntries.length === 0) {
+    saveDownloadedSet(downloadedSet);
+    props.deleteProperty(PROP_RESUME);
+    props.setProperty(PROP_LAST_RUN, String(Date.now()));
+    return;
+  }
 
-  const startPi = resumeState ? (resumeState.podcastIndex || 0) : 0;
-  const startEi = resumeState ? (resumeState.episodeIndex || 0) : 0;
+  let startPi = 0;
+  let startEi = 0;
+  if (resumeState) {
+    if (resumeState.podcastUrl) {
+      const idx = subEntries.findIndex(([url]) => url === resumeState.podcastUrl);
+      if (idx >= 0) {
+        startPi = idx;
+        startEi = resumeState.episodeIndex || 0;
+      }
+    } else if (typeof resumeState.podcastIndex === 'number') {
+      startPi = resumeState.podcastIndex;
+      startEi = resumeState.episodeIndex || 0;
+    }
+  }
 
   let driveFull = false;
 
@@ -866,9 +1044,10 @@ function podcastManager() {
     for (let ei = startEi_; ei < episodes.length; ei++) {
       // ── Time check ──────────────────────────────────────────
       if (Date.now() - startTime > 5.5 * 60 * 1000) {
-        props.setProperty(PROP_RESUME, JSON.stringify({ podcastIndex: pi, episodeIndex: ei }));
+        props.setProperty(PROP_RESUME, JSON.stringify({ podcastUrl: rssUrl, episodeIndex: ei }));
         const trig = ScriptApp.newTrigger('podcastManager').timeBased().after(30 * 1000).create();
         props.setProperty(PROP_ONE_TIME_TRIG, trig.getUniqueId());
+        saveDownloadedSet(downloadedSet);
         // Do NOT write lastRunTime – run is incomplete
         return;
       }
@@ -877,14 +1056,14 @@ function podcastManager() {
 
       const folderTitle = subs[rssUrl].title || subData.title;
       const pubDate = ep.date ? new Date(ep.date) : new Date();
-      syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate);
-      if (isDownloaded(ep.url)) continue;
+      syncDownloadedFlagWithDrive(ep.url, folderTitle, ep.title, pubDate, downloadedSet);
+      if (isDownloaded(ep.url, downloadedSet)) continue;
 
       // ── Download ─────────────────────────────────────────────
       try {
         const folder = getPodcastFolder(folderTitle);
         const results = downloadEpisodeToFolder(ep.url, ep.title, pubDate, folder, ep.description);
-        markDownloaded(ep.url);
+        markDownloaded(ep.url, downloadedSet);
         const link = results.map(r => r.driveUrl).join('\n');
         writeLog(subs[rssUrl].title, ep.title, 'הורד אוטומטית', '', link);
       } catch (e) {
@@ -903,10 +1082,23 @@ function podcastManager() {
     }
   }
 
-  // 3. Save updated subscription metadata (e.g. refreshed titles)
-  saveSubscriptions(subs);
+  // 3. Save updated metadata and downloaded URL set
+  syncActiveSubscriptionsMetadata(subs);
+  saveDownloadedSet(downloadedSet);
 
-  // 4. Run completed (or drive full) – write timestamp and clear resume state
-  props.setProperty(PROP_LAST_RUN, String(Date.now()));
+  // 4. Run completed – clear resume state and update last successful auto-run timestamp
   props.deleteProperty(PROP_RESUME);
+  if (!driveFull) {
+    props.setProperty(PROP_LAST_RUN, String(Date.now()));
+  }
+}
+
+function getLastAutoRunLabel() {
+  const raw = PropertiesService.getScriptProperties().getProperty(PROP_LAST_RUN);
+  if (!raw) return 'הורדה אוטומטית אחרונה: טרם בוצעה';
+  const ts = parseInt(raw, 10);
+  if (isNaN(ts)) return 'הורדה אוטומטית אחרונה: טרם בוצעה';
+  const tz = Session.getScriptTimeZone() || 'Asia/Jerusalem';
+  const text = Utilities.formatDate(new Date(ts), tz, 'dd/MM/yyyy HH:mm');
+  return `הורדה אוטומטית אחרונה: ${text}`;
 }
