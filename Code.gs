@@ -17,6 +17,10 @@ const LEGACY_PROP_DOWNLOADED = 'downloadedUrls';
 const PROP_LAST_RUN = 'lastRunTime';
 const PROP_RESUME = 'resumeState';
 const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
+/**
+ * Max per Range response: stay under Apps Script UrlFetch’s ~50MB response cap.
+ * Peak RAM is mitigated by in-place Xing fix + dropping refs after each part (not by shrinking this).
+ */
 const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const SOFT_STOP_MS = 4 * 60 * 1000;
@@ -646,33 +650,17 @@ function normalizeFirstChunkDurationMetadata(bytes) {
   const hasXing = hasAsciiAt(bytes, xingOffset, 'Xing') || hasAsciiAt(bytes, xingOffset, 'Info');
   if (!hasXing) return bytes;
 
-  const normalized = bytes.slice();
-  normalized[xingOffset] = 0;
-  normalized[xingOffset + 1] = 0;
-  normalized[xingOffset + 2] = 0;
-  normalized[xingOffset + 3] = 0;
-  return normalized;
+  // Mutate in place — avoids a full-array copy (~CHUNK_SIZE) that doubled RAM on part 001.
+  bytes[xingOffset] = 0;
+  bytes[xingOffset + 1] = 0;
+  bytes[xingOffset + 2] = 0;
+  bytes[xingOffset + 3] = 0;
+  return bytes;
 }
 
 function fetchContentLength(url, runT0) {
-  debugStep('fetchContentLength: HEAD', debugSnippet(url, 120), runT0);
-  try {
-    const headResp = UrlFetchApp.fetch(url, {
-      method: 'head',
-      followRedirects: true,
-      muteHttpExceptions: true
-    });
-    debugStep('fetchContentLength: HEAD response', 'HTTP ' + headResp.getResponseCode(), runT0);
-    const fromHead = parseContentLength(headResp.getHeaders());
-    if (fromHead !== null) {
-      debugStep('fetchContentLength: from HEAD', 'length=' + fromHead, runT0);
-      return fromHead;
-    }
-  } catch (e) {
-    debugStep('fetchContentLength: HEAD failed', e.message || String(e), runT0);
-  }
-
-  debugStep('fetchContentLength: Range probe', debugSnippet(url, 120), runT0);
+  // UrlFetchApp supports only get/post/put/delete/patch — not "head" (invalid method in Apps Script).
+  debugStep('fetchContentLength: Range probe (bytes=0-0)', debugSnippet(url, 120), runT0);
   try {
     const probeResp = UrlFetchApp.fetch(url, {
       headers: { Range: 'bytes=0-0' },
@@ -788,6 +776,7 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
 
     debugStep('downloadChunked: getContent start', 'part=' + part, runT0);
     let bytes = resp.getContent();
+    resp = null;
     debugStep('downloadChunked: getContent done', 'part=' + part + ' len=' + bytes.length, runT0);
     if (part === 1) {
       debugStep('downloadChunked: normalizeFirstChunkDurationMetadata', 'part=1', runT0);
@@ -795,7 +784,10 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       debugStep('downloadChunked: normalizeFirstChunkDurationMetadata done', 'len=' + bytes.length, runT0);
     }
     const fileName = buildFileName(episodeTitle, pubDate, part);
+    const partLen = bytes.length;
+    debugStep('downloadChunked: newBlob start', 'part=' + part + ' len=' + partLen, runT0);
     const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
+    bytes = null;
     debugStep('downloadChunked: createFile start', 'part=' + part + ' ' + debugSnippet(fileName, 100), runT0);
     const file = folder.createFile(blob);
     debugStep('downloadChunked: createFile done', 'part=' + part + ' id=' + file.getId(), runT0);
@@ -807,11 +799,11 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       driveUrl: `https://drive.google.com/file/d/${file.getId()}/view`
     });
 
-    offset += bytes.length;
+    offset += partLen;
 
     // End conditions
     if (totalSize && offset >= totalSize) break;
-    if (!totalSize && bytes.length < CHUNK_SIZE) break; // server returned less → EOF
+    if (!totalSize && partLen < CHUNK_SIZE) break; // server returned less → EOF
 
     part++;
   }

@@ -4,6 +4,8 @@
 
 - **Execution debug logging:** Added `debugStep` / `debugSnippet` helpers that write structured `[podcast]` lines via `console.log` (visible under Apps Script → Executions). Logs cover `podcastManager` flow, RSS fetch/parse, `fetchContentLength`, direct vs chunked downloads (including each Range part, `getContent`, Drive `createFile`), and sidebar `downloadEpisode`. Passes optional `runT0` so lines show elapsed milliseconds since run start.
 
+- **Large episode stability (memory):** Execution logs showed the runtime dying right after loading chunk 2 into memory, before `newBlob` — consistent with RAM pressure (two big byte arrays + blob build), not the 360s limit. Fixes: `normalizeFirstChunkDurationMetadata` no longer does a full-array `slice()` (in-place Xing clear); removed invalid `HEAD` in `fetchContentLength` (UrlFetch only allows get/post/put/delete/patch); clear `resp`/`bytes` after use; use `bytes.length` for part length (never `blob.getBytes()` for size). `CHUNK_SIZE` remains 45MB to stay under the ~50MB UrlFetch response cap while minimizing part count.
+
 ## 2026-04-18
 
 - **README (Hebrew section):** Wrapped the Hebrew documentation in a single `<div dir="rtl">` so GitHub renders RTL layout without per-element alignment. Replaced generic section titles with headings that describe what each section covers (installation paths, sidebar actions, storage, troubleshooting).
