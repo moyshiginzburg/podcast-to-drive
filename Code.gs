@@ -1,6 +1,5 @@
 // ============================================================
 // PODCAST MANAGER FOR GOOGLE DRIVE
-// Based on: https://www.labnol.org/auto-download-podcasts-google-drive-220503
 // ============================================================
 
 // --- Constants ---
