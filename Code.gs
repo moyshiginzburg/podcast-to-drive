@@ -855,20 +855,29 @@ function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description,
       throw new Error(`HTTP ${code} בחלק ${part}`);
     }
 
-    debugStep('downloadChunked: getContent start', 'part=' + part, runT0);
-    let bytes = resp.getContent();
-    resp = null;
-    debugStep('downloadChunked: getContent done', 'part=' + part + ' len=' + bytes.length, runT0);
+    const fileName = buildFileName(episodeTitle, pubDate, part);
+    let blob;
+    let partLen;
+
     if (part === 1) {
+      debugStep('downloadChunked: getContent start', 'part=' + part, runT0);
+      let bytes = resp.getContent();
+      debugStep('downloadChunked: getContent done', 'part=' + part + ' len=' + bytes.length, runT0);
       debugStep('downloadChunked: normalizeFirstChunkDurationMetadata', 'part=1', runT0);
       bytes = normalizeFirstChunkDurationMetadata(bytes);
       debugStep('downloadChunked: normalizeFirstChunkDurationMetadata done', 'len=' + bytes.length, runT0);
+      partLen = bytes.length;
+      debugStep('downloadChunked: newBlob start', 'part=' + part + ' len=' + partLen, runT0);
+      blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
+      bytes = null;
+    } else {
+      blob = resp.getBlob().setName(fileName).setContentType('audio/mpeg');
+      const headers = resp.getHeaders() || {};
+      const declaredLen = parseContentLength(headers);
+      partLen = declaredLen !== null ? declaredLen : (rangeEnd - offset + 1);
+      debugStep('downloadChunked: getBlob done', 'part=' + part + ' len=' + partLen, runT0);
     }
-    const fileName = buildFileName(episodeTitle, pubDate, part);
-    const partLen = bytes.length;
-    debugStep('downloadChunked: newBlob start', 'part=' + part + ' len=' + partLen, runT0);
-    const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
-    bytes = null;
+    resp = null;
     debugStep('downloadChunked: createFile start', 'part=' + part + ' ' + debugSnippet(fileName, 100), runT0);
     const file = folder.createFile(blob);
     debugStep('downloadChunked: createFile done', 'part=' + part + ' id=' + file.getId(), runT0);
