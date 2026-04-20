@@ -1,5 +1,11 @@
 # Change log
 
+## 2026-04-20
+
+- **RSS parse early exit for memory pressure:** `parseRSS` now accepts an optional subscription cutoff timestamp and evaluates `pubDate` before building episode objects. In automatic runs, parsing stops (`break`) as soon as it reaches an item older than the subscription date, so large feeds no longer allocate full episode arrays before filtering.
+- **Separated scraper/downloader executions:** `podcastManager` now enqueues pending episodes into a hidden queue sheet instead of downloading inline. A new `downloadWorker` trigger handler pops one queue item per run, performs `downloadEpisodeToFolder` in a fresh execution context, persists chunk resume offsets when soft time budget is hit, and self-reschedules until the queue is empty.
+- **Direct-download fallback for false Content-Length:** when `downloadEpisodeToFolder` selects direct mode (`contentLength <= CHUNK_SIZE`), `downloadDirect` is wrapped in `try/catch`. If the error includes `מגבלת UrlFetch`, it immediately falls back to `downloadChunked(..., null, options)` so lying servers no longer cause false “no Range support” outcomes.
+
 ## 2026-04-19 (later)
 
 - **Auto vs manual “already downloaded”:** `syncDownloadedFlagWithDrive` (clear URL from `הורדות` when the MP3 is missing from Drive) runs only for **manual** sidebar downloads. **`podcastManager` (automatic / “הפעל הורדה עכשיו”)** no longer calls it, so deleting files to free space does not trigger automatic re-download; manual re-fetch still works when the file is gone.
