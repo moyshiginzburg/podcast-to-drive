@@ -1,3 +1,10 @@
+/**
+ * Podcast to Drive
+ * Author: Moyshi
+ * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
+ * License: AGPL-3.0
+ */
+
 // ============================================================
 // PODCAST MANAGER FOR GOOGLE DRIVE
 // ============================================================
