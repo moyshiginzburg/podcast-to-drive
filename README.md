@@ -1,86 +1,168 @@
-# Podcast manager for Google Drive & Sheets
+# 🎙️ Podcast to Drive
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
+[![Google Apps Script](https://img.shields.io/badge/Google%20Apps%20Script-4285F4?style=flat&logo=google&logoColor=white)](https://developers.google.com/apps-script)
+[![Google Drive](https://img.shields.io/badge/Google%20Drive-4285F4?style=flat&logo=googledrive&logoColor=white)](https://drive.google.com/)
 
-## What this project does
+[**🇮🇱 לקריאת המסמך בעברית, גללו למטה (Hebrew Version Below)**](#-podcast-to-drive---hebrew)
 
-This **Google Apps Script** project is bound to a **Google Sheet**. It adds a custom menu and a **modal manager** (`Sidebar.html`) to subscribe to podcasts (iTunes search, **RSS URL**, or **OPML**), browse episodes, download MP3s to **Google Drive** under a root folder named `הסכתים`, and optionally run **automatic downloads** every six hours. A **`Log`** sheet records downloads and errors; successful rows include a **`קישור`** column with Drive URLs (rich text when an episode is split into multiple files).
+**Podcast to Drive** is a smart, private, and ad-free podcast manager built entirely on Google Apps Script. It allows you to subscribe to your favorite podcasts and automatically downloads new episodes directly to your personal Google Drive, organizing them neatly so you can listen anywhere without relying on third-party apps.
 
-**Purpose:** keep podcast subscriptions and files in your Drive with a simple Hebrew UI, while sheet and Drive layout stay predictable.
+---
 
-**How it works (high level):** the script reads subscriptions from the `מנויים` sheet, fetches each RSS feed, compares episodes against the `הורדות` sheet and Drive, downloads new audio into per-podcast subfolders, and appends rows to `Log`.
+## ✨ Features
+- **Direct to Drive:** Downloads MP3 files straight to a dedicated `הסכתים` folder in your Google Drive.
+- **Privacy First:** Your data never leaves your Google account. No external servers, no tracking, no sign-ups.
+- **Smart Background Worker:** Automatically checks for new episodes every 6 hours. Background downloads are queued and processed asynchronously, bypassing execution time limits and memory constraints.
+- **Large File Support:** Seamlessly handles large podcast episodes using chunked downloads (`Range` requests) and mitigates Apps Script memory limitations.
+- **Simple UI:** Manage subscriptions (via iTunes search, RSS, or OPML) through a clean, Hebrew-localized Sidebar inside Google Sheets.
+- **Detailed Logging:** Keeps a rich-text log of all downloaded episodes and their direct Drive links.
 
-## Project files
+---
 
-| File | Role |
-|------|------|
-| `Code.gs` | Server logic: RSS, Drive, subscriptions, downloads, triggers, logging |
-| `Sidebar.html` | Modal UI served by `HtmlService` (Hebrew user-facing strings) |
-| `appsscript.json` | Manifest: V8 runtime, `timeZone` (`Asia/Jerusalem`), exception logging |
-| `CHANGES.md` | Change log (English) |
+## 🚀 How It Works
 
-## Installation
+The system operates within a Google Sheet that acts as your database and control panel.
+1. **Subscriptions (`מנויים`):** You add podcasts via the UI. The script saves the RSS feed and metadata here.
+2. **Download Engine (`Code.gs`):** 
+   - A time-based trigger runs `podcastManager` every 6 hours.
+   - It parses your active RSS feeds and identifies episodes published after your subscription date.
+   - Pending episodes are pushed to a hidden queue (`תור הורדות`).
+   - A separate background worker (`downloadWorker`) processes this queue one by one, downloading files directly or in chunks if they are large, ensuring the script never times out.
+3. **Storage (`הסכתים` folder):** Audio files are saved in `Google Drive/הסכתים/<Podcast Name>/`.
+4. **Tracking (`הורדות` & `Log`):** Successfully downloaded episode URLs are saved in the `הורדות` sheet to prevent duplicates. A detailed record with clickable links is written to the `Log` sheet.
 
-### Option A – clasp (recommended for developers)
+---
 
-1. Install [clasp](https://github.com/google/clasp): `npm install -g @google/clasp`
-2. Run `clasp login`
-3. From this folder: `clasp create --title "Your title" --type sheets` (creates a new Sheet + bound script), then `clasp push`
-4. Open the Sheet → **Extensions → Apps Script**, run **`onOpen`** once and complete **authorization**
-5. Refresh the Sheet
+## 🛠️ Installation
 
-### Option B – Manual copy in the browser
+### Option 1: 1-Click Installation (Recommended for Users)
+The easiest way to get started is by copying the pre-configured template:
+1. Go to the **[1-Click Installation Page](https://moyshiginzburg.github.io/podcast-to-drive/)** (Hebrew).
+2. Click the **"צור עותק של המערכת"** button to clone the Google Sheet to your Drive.
+3. Open the copied Sheet, go to the **"התחלה"** (Start) tab, and click the green button to authorize the script.
+4. Once authorized, a new menu **`🎙 הסכתים`** will appear at the top. Click it to open the manager!
 
-1. Create a new **Google Sheet**
-2. **Extensions → Apps Script**
-3. Replace the default `Code.gs` with this repository’s `Code.gs`
-4. Add an **HTML** file named **`Sidebar`** (no extension) with the contents of `Sidebar.html`
-5. In project settings, enable **Show app manifest** and align `appsscript.json` with this repo
-6. Save, run **`onOpen`**, approve permissions, refresh the Sheet
+### Option 2: Local Deployment via Clasp (For Developers)
+If you want to deploy the code yourself or contribute:
+1. Install [clasp](https://github.com/google/clasp): 
+   ```bash
+   npm install -g @google/clasp
+   ```
+2. Login to your Google account:
+   ```bash
+   clasp login
+   ```
+3. Clone this repository and navigate to the folder.
+4. Create a new Apps Script project bound to a Google Sheet:
+   ```bash
+   clasp create --title "Podcast Manager" --type sheets
+   ```
+5. Push the code to your project:
+   ```bash
+   clasp push
+   ```
+6. Open your Google Sheet, navigate to **Extensions → Apps Script**, run the `onOpen` function once to complete authorization, and refresh the page.
 
-## Spreadsheet menu (`🎙 הסכתים`)
+---
 
-After `onOpen`, the Sheet shows a custom menu (labels are Hebrew as in `Code.gs`):
-
-| Menu item | Behavior |
-|-----------|----------|
-| **פתח מנהל הסכתים** | Opens the modal manager (`showSidebar`) |
-| **הפעל הורדה עכשיו** | Runs `podcastManager` once (same logic as the automatic job) |
-| **התקן טריגר אוטומטי (כל 6 שעות)** | Schedules `podcastManager` every 6 hours |
-| **הסר טריגר אוטומטי** | Removes the periodic trigger |
-
-## Using the manager window
-
-- **Search** – find podcasts via the iTunes API and subscribe from results  
-- **RSS URL** – paste a feed URL; the server validates with `parseRSS` before saving  
-- **OPML** – import / export subscriptions  
-- After subscribing from search, use **Back** so the list reloads from the server (`loadPodcastList`)
-
-## Automatic downloads
-
-Install the trigger from the menu above. Episodes published **after** the subscription date (`תאריך הרשמה` on `מנויים`) are candidates for download. Uninstall the trigger when you no longer want scheduled runs.
-
-## Storage layout
-
-Sheet and column names match the constants in `Code.gs` (Hebrew where defined):
+## 📜 Storage Layout
 
 | Location | Contents |
 |----------|----------|
 | Sheet **`מנויים`** | Subscriptions: `כתובת RSS`, `שם`, `תמונה`, `תאריך הרשמה`, `סטטוס` (`פעיל` / `בוטל`) |
 | Sheet **`הורדות`** | Downloaded episode URLs (`כתובת`) |
 | Sheet **`Log`** | Columns: `תאריך`, `פודקאסט`, `פרק`, `סטטוס`, `הערה`, `קישור` |
-| Script **Properties** | `lastRunTime`, `resumeState`, `oneTimeTrigId` (resume / continuation triggers) |
-| Drive **`הסכתים/`** | Root folder |
-| Drive **`הסכתים/<podcast name>/`** | MP3 files |
+| Sheet **`תור הורדות`** | *(Hidden)* Internal queue for the background downloader |
+| Script **Properties** | `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| Drive **`הסכתים/`** | Root folder for audio files |
+| Drive **`הסכתים/<podcast name>/`** | MP3 files per podcast |
 
-Legacy data may be migrated once from Script Properties into `מנויים` / `הורדות` (`subscriptions`, `downloadedUrls`).
+## ⚠️ Common Issues & Troubleshooting
 
-## Technical notes
+- **`PERMISSION_DENIED` Error:** If you see an error saying "PERMISSION_DENIED" when opening or using the sidebar, this is a known Google Apps Script issue caused by being logged into **multiple Google accounts** in the same browser session.
+  - *Solution:* Open the spreadsheet in an **Incognito/Private window**, or use a dedicated browser profile where only one Google account is logged in.
+- **Mobile Support:** The podcast manager UI (Custom Menu and Sidebar) can **only be accessed from a computer browser**. The Google Sheets mobile app does not support custom menus or sidebars. However, the automatic background downloads will continue to work normally regardless of the device you use.
 
-- **Script time zone:** `Session.getScriptTimeZone()` follows `appsscript.json` (`Asia/Jerusalem`). The **spreadsheet** also has its own time zone under **File → Settings**; align both if you care about consistent date display in cells.
-- **Filenames:** `YYMMDD <episode title>.mp3`. Large downloads use chunked parts: `YYMMDD <title> (חלק 001).mp3`, etc. (`CHUNK_SIZE` is 45 MB; `UrlFetch` responses are capped at 50 MB).
-- **Execution limit:** Automatic runs use a soft-stop window (`SOFT_STOP_MS`, currently 4 minutes). Progress (`resumeState`) is checkpointed frequently, and when soft-stop is reached the run exits cleanly after scheduling a one-time continuation trigger. Time checks run at podcast and episode boundaries, and in chunked downloads resume can continue from the saved chunk offset/part instead of restarting the whole episode; `lastRunTime` is updated when a full run completes successfully.
-- **“Already downloaded” vs Drive:** For **manual** downloads from the sidebar, the script checks that the expected file(s) still exist in Drive; if you deleted a file, the URL can be cleared so the episode can download again. **Automatic** runs trust the `הורדות` sheet only (deleting files from Drive does not cause automatic re-download).
-- **`HtmlService` / `google.script.run`:** If you see **PERMISSION_DENIED** (“error reading from storage”), try a **single Google account** in the browser (e.g. **Incognito** with one account); multiple simultaneous logins often cause this.
+## 📄 License
+This project is licensed under the [AGPL-3.0 License](LICENSE).
 
-## License
+---
+<br>
 
-See `LICENSE` in this repository.
+<div dir="rtl">
+
+# 🎙️ Podcast to Drive - בעברית
+
+**Podcast to Drive** (פודקאסט לדרייב) הוא מנהל פודקאסטים חכם, פרטי ונקי מפרסומות, הבנוי כולו על גבי סביבת Google Apps Script. המערכת מאפשרת לכם להירשם לפודקאסטים האהובים עליכם ומורידה אוטומטית פרקים חדשים ישירות ל-Google Drive האישי שלכם, כך שתוכלו להאזין להם מכל מקום בלי להיות תלויים באפליקציות צד-שלישי.
+
+## ✨ תכונות מרכזיות
+- **ישירות לדרייב:** הורדת קבצי MP3 ישירות לתיקיית `הסכתים` ב-Google Drive שלכם.
+- **פרטיות מעל הכל:** המידע שלכם נשאר רק אצלכם. המערכת פועלת מתוך חשבון הגוגל שלכם, ללא שרתים חיצוניים או הרשמות.
+- **טייס אוטומטי חכם:** בדיקה אוטומטית של פרקים חדשים כל 6 שעות. המערכת מנהלת תור הורדות ברקע כדי לעקוף את מגבלות זמן הריצה והזיכרון של גוגל.
+- **תמיכה בקבצים גדולים:** טיפול חכם בפרקים ארוכים באמצעות הורדה בחלקים (`Chunked Downloads`), מה שמונע קריסות (שגיאות זיכרון) ומבטיח הורדה חלקה של כל פרק.
+- **ממשק משתמש פשוט:** ניהול מנויים (דרך חיפוש ב-iTunes, הזנת כתובת RSS, או ייבוא OPML) דרך חלונית צד נקייה וידידותית בעברית מתוך Google Sheets.
+- **יומן פעילות מפורט:** מעקב מלא אחר כל ההורדות בגיליון ה-`Log`, כולל קישורים ישירים ונוחים לקבצים בדרייב.
+
+## 🚀 איך זה עובד?
+
+המערכת פועלת מתוך גיליון Google Sheets שמשמש כמסד הנתונים ולוח הבקרה שלכם:
+1. **מנויים (`מנויים`):** המקום שבו נשמרים הפודקאסטים שהוספתם במערכת.
+2. **מנוע ההורדות (`Code.gs`):** 
+   - טריגר אוטומטי פועל כל 6 שעות ובודק אם יצאו פרקים חדשים מאז תאריך ההרשמה שלכם לפודקאסט.
+   - פרקים שממתינים להורדה נכנסים לגיליון תור נסתר (`תור הורדות`).
+   - "פועל רקע" (Worker) נפרד עובר על התור ומוריד את הפרקים אחד-אחד אל הדרייב שלכם ביעילות וללא חריגה מזמני הריצה המותרים של גוגל.
+3. **אחסון (תיקיית `הסכתים`):** קבצי השמע נשמרים תחת נתיב מסודר בדרייב: `הסכתים/<שם הפודקאסט>/`.
+4. **מעקב (`הורדות` ו-`Log`):** המערכת רושמת כל פרק שירד כדי לא להוריד אותו פעמיים, ומתעדת את התהליך (וההצלחה) ביומן הפעילות.
+
+## 🛠️ התקנה
+
+### אפשרות 1: התקנה בקליק (הדרך המומלצת למשתמשים)
+הדרך הקלה והמהירה ביותר להתחיל היא על ידי יצירת עותק של התבנית המוכנה מראש:
+1. היכנסו אל **[עמוד ההתקנה של הפרויקט](https://moyshiginzburg.github.io/podcast-to-drive/)**.
+2. לחצו על הכפתור **"צור עותק של המערכת"** כדי לשכפל את הגיליון לחשבון שלכם.
+3. פתחו את הגיליון שנוצר, היכנסו ללשונית **"התחלה"**, ולחצו על הכפתור הירוק כדי לאשר למערכת את הרשאות הגישה בפעם הראשונה.
+4. לאחר אישור ההרשאות, יופיע בתפריט העליון של הגיליון כפתור חדש בשם **`🎙 הסכתים`**. לחצו עליו, בחרו ב"פתח מנהל הסכתים", ותתחילו לארגן את הפודקאסטים שלכם!
+
+### אפשרות 2: פריסה מקומית דרך Clasp (למפתחים)
+אם תרצו לעבוד על הקוד בעצמכם או לתרום לפרויקט:
+1. התקינו את סביבת [clasp](https://github.com/google/clasp): 
+   ```bash
+   npm install -g @google/clasp
+   ```
+2. התחברו לחשבון הגוגל שלכם דרך הטרמינל:
+   ```bash
+   clasp login
+   ```
+3. שכפלו את המאגר הזה למחשב שלכם ונווטו אל התיקייה.
+4. צרו פרויקט Apps Script חדש שמחובר לגיליון חדש בדרייב:
+   ```bash
+   clasp create --title "Podcast Manager" --type sheets
+   ```
+5. דחפו את הקוד שלכם לפרויקט:
+   ```bash
+   clasp push
+   ```
+6. פתחו את גיליון ה-Google Sheet שנוצר, גשו בתפריט ל-**Extensions → Apps Script**, הריצו את הפונקציה `onOpen` פעם אחת על מנת לאשר הרשאות, ורעננו את דף הגיליון.
+
+## 📜 מבנה האחסון
+
+| מיקום | תוכן |
+|----------|----------|
+| גיליון **`מנויים`** | רשימת המנויים: `כתובת RSS`, `שם`, `תמונה`, `תאריך הרשמה`, `סטטוס` (`פעיל` / `בוטל`) |
+| גיליון **`הורדות`** | קישורי הפרקים שכבר ירדו כדי למנוע כפילויות (`כתובת`) |
+| גיליון **`Log`** | יומן המערכת: `תאריך`, `פודקאסט`, `פרק`, `סטטוס`, `הערה`, `קישור` ישיר לקובץ |
+| גיליון **`תור הורדות`** | *(מוסתר)* תור פנימי המנהל את הורדות הרקע של הפרקים |
+| מאפייני סקריפט | משתני מערכת: `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| כונן Drive **`הסכתים/`** | התיקייה הראשית שבה נשמרים כל הפודקאסטים |
+| כונן Drive **`הסכתים/<שם הפודקאסט>/`** | קבצי ה-MP3 מסודרים לפי פודקאסט |
+
+## ⚠️ בעיות נפוצות ופתרון תקלות
+
+- **שגיאת `PERMISSION_DENIED` בחלונית הניהול:** אם נתקלתם בשגיאה בסגנון "אירעה שגיאת שרת... PERMISSION_DENIED", מדובר בבעיה מוכרת של גוגל שמתרחשת כאשר **מספר חשבונות גוגל שונים מחוברים לאותו דפדפן** במקביל.
+  - *פתרון:* פתחו את הגיליון ב**חלון גלישה בסתר (Incognito)**, או השתמשו בפרופיל דפדפן (כמו פרופיל כרום) שבו מחובר אך ורק חשבון גוגל אחד.
+- **שימוש בטלפון הנייד:** ניהול הפודקאסטים (הוספת מנויים, פתיחת תפריט ההסכתים) **אפשרי ממחשב בלבד**. אפליקציית Google Sheets בטלפון אינה תומכת בתפריטים מותאמים אישית או חלוניות צד. עם זאת, הורדות הרקע האוטומטיות ימשיכו לפעול כרגיל בלי קשר למכשיר שבו אתם משתמשים.
+
+## 📄 רישיון
+הפרויקט פועל תחת רישיון קוד פתוח [AGPL-3.0 License](LICENSE).
+
+</div>
