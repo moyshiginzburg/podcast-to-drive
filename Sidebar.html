@@ -132,18 +132,24 @@
   }
   .podcast-item {
     display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    position: relative;
+  }
+  .podcast-main-row {
+    display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px;
-    border-radius: 6px;
     cursor: pointer;
-    border: 1px solid #e0e0e0;
-    background: #fff;
-    transition: background 0.1s;
-    position: relative;
     min-height: 56px;
+    box-sizing: border-box;
+    transition: background 0.1s;
+    border-radius: 6px;
   }
-  .podcast-item:hover { background: #e8f0fe; }
+  .podcast-main-row:hover { background: #e8f0fe; }
   .podcast-thumb {
     width: 40px;
     height: 40px;
@@ -256,10 +262,34 @@
   /* ── Search results ── */
   .result-item {
     display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid #efefef;
+  }
+  .result-main-row {
+    display: flex;
     align-items: center;
     gap: 8px;
     padding: 7px 6px;
-    border-bottom: 1px solid #efefef;
+    box-sizing: border-box;
+  }
+  .pod-desc-container {
+    padding: 0 10px 8px;
+    font-size: 11px;
+    color: #555;
+    line-height: 1.4;
+    display: none;
+    border-top: 1px solid #efefef;
+    margin-top: 0;
+    padding-top: 8px;
+    word-wrap: break-word;
+  }
+  .pod-desc-container a { color: #1a73e8; }
+  .pod-desc-container.visible { display: block; }
+  .pod-desc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 10px 8px;
   }
   .result-thumb {
     width: 40px;
@@ -511,16 +541,25 @@ function renderPodcastList() {
   subscriptions.forEach(pod => {
     const item = document.createElement('div');
     item.className = 'podcast-item';
+    const safeId = pod.url.replace(/[^a-zA-Z0-9]/g, '');
     item.innerHTML = `
-      ${pod.imageUrl
-        ? `<img class="podcast-thumb" src="${escHtml(pod.imageUrl)}" alt="" onerror="this.parentNode.replaceChild(makePlaceholder(), this)">`
-        : `<div class="podcast-thumb-placeholder">🎙</div>`}
-      <span class="podcast-name">${escHtml(pod.title)}</span>
-      <button class="podcast-remove" title="הסר מנוי" data-url="${escHtml(pod.url)}">×</button>
+      <div class="podcast-main-row">
+        ${pod.imageUrl
+          ? `<img class="podcast-thumb" src="${escHtml(pod.imageUrl)}" alt="" onerror="this.parentNode.replaceChild(makePlaceholder(), this)">`
+          : `<div class="podcast-thumb-placeholder">🎙</div>`}
+        <span class="podcast-name">${escHtml(pod.title)}</span>
+        <button class="podcast-remove" title="הסר מנוי" data-url="${escHtml(pod.url)}">×</button>
+      </div>
+      <div class="pod-desc-container" id="pod-desc-${safeId}">
+        <div class="pod-desc-content"><span class="spinner"></span> טוען תיאור...</div>
+      </div>
+      <div class="pod-desc-footer">
+        <button class="desc-toggle pod-desc-btn" data-url="${escHtml(pod.url)}">הצג תיאור ▸</button>
+      </div>
     `;
 
     // Click on item → load episodes (but not on remove button)
-    item.addEventListener('click', e => {
+    item.querySelector('.podcast-main-row').addEventListener('click', e => {
       if (e.target.classList.contains('podcast-remove')) return;
       openEpisodeList(pod);
     });
@@ -535,8 +574,44 @@ function renderPodcastList() {
         .removeSubscription(pod.url);
     });
 
+    item.querySelector('.pod-desc-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      togglePodcastDesc(this, pod.url);
+    });
+
     container.appendChild(item);
   });
+}
+
+const fetchedPodcasts = {};
+
+function togglePodcastDesc(btn, url) {
+  const safeId = url.replace(/[^a-zA-Z0-9]/g, '');
+  const container = document.getElementById('pod-desc-' + safeId);
+  const content = container.querySelector('.pod-desc-content');
+  
+  const isOpen = container.classList.toggle('visible');
+  btn.textContent = isOpen ? 'הסתר תיאור ▾' : 'הצג תיאור ▸';
+  
+  if (isOpen && !fetchedPodcasts[url]) {
+    fetchedPodcasts[url] = true;
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res.success) {
+          content.innerHTML = `<span style="color:#d93025">שגיאה: ${escHtml(res.error)}</span>`;
+          return;
+        }
+        let html = res.description ? escHtml(res.description).replace(/\n/g, '<br>') : '';
+        if (res.link) {
+          html += (html ? '<br><br>' : '') + `<a href="${escHtml(res.link)}" target="_blank">🔗 לאתר הפודקאסט</a>`;
+        }
+        content.innerHTML = html || 'אין תיאור זמין.';
+      })
+      .withFailureHandler(err => {
+        content.innerHTML = `<span style="color:#d93025">שגיאה בטעינה</span>`;
+      })
+      .fetchPodcastInfo(url);
+  }
 }
 
 function makePlaceholder() {
@@ -706,21 +781,30 @@ function renderSearchResults(results) {
   results.forEach(r => {
     const item = document.createElement('div');
     item.className = 'result-item';
+    const safeId = r.feedUrl.replace(/[^a-zA-Z0-9]/g, '');
     item.innerHTML = `
-      ${r.artworkUrl
-        ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.style.display='none'">`
-        : `<div class="result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;">🎙</div>`}
-      <div class="result-info">
-        <div class="result-name">${escHtml(r.trackName)}</div>
-        <div class="result-artist">${escHtml(r.artistName)}</div>
+      <div class="result-main-row">
+        ${r.artworkUrl
+          ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.style.display='none'">`
+          : `<div class="result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;">🎙</div>`}
+        <div class="result-info">
+          <div class="result-name">${escHtml(r.trackName)}</div>
+          <div class="result-artist">${escHtml(r.artistName)}</div>
+        </div>
+        <button class="subscribe-btn ${r.isSubscribed ? 'subscribed' : ''}"
+                ${r.isSubscribed ? 'disabled' : ''}
+                data-feed="${escHtml(r.feedUrl)}"
+                data-name="${escHtml(r.trackName)}"
+                data-img="${escHtml(r.artworkUrl)}">
+          ${r.isSubscribed ? '✓ מנוי' : 'הרשם'}
+        </button>
       </div>
-      <button class="subscribe-btn ${r.isSubscribed ? 'subscribed' : ''}"
-              ${r.isSubscribed ? 'disabled' : ''}
-              data-feed="${escHtml(r.feedUrl)}"
-              data-name="${escHtml(r.trackName)}"
-              data-img="${escHtml(r.artworkUrl)}">
-        ${r.isSubscribed ? '✓ מנוי' : 'הרשם'}
-      </button>
+      <div class="pod-desc-container" id="pod-desc-${safeId}">
+        <div class="pod-desc-content"><span class="spinner"></span> טוען תיאור...</div>
+      </div>
+      <div class="pod-desc-footer">
+        <button class="desc-toggle pod-desc-btn" data-url="${escHtml(r.feedUrl)}">הצג תיאור ▸</button>
+      </div>
     `;
 
     item.querySelector('.subscribe-btn').addEventListener('click', function() {
@@ -748,6 +832,11 @@ function renderSearchResults(results) {
           alert('שגיאה: ' + err.message);
         })
         .addSubscription(feedUrl, title, imageUrl);
+    });
+
+    item.querySelector('.pod-desc-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      togglePodcastDesc(this, r.feedUrl);
     });
 
     container.appendChild(item);

@@ -1000,6 +1000,34 @@ function sanitizeXmlForParsing(xmlText) {
 // SIDEBAR-CALLABLE SERVER FUNCTIONS
 // ============================================================
 
+/** Returns podcast info (description and link) for a given RSS URL */
+function fetchPodcastInfo(rssUrl) {
+  try {
+    const resp = UrlFetchApp.fetch(rssUrl, { followRedirects: true, muteHttpExceptions: true });
+    if (resp.getResponseCode() >= 400) return { success: false, error: 'HTTP ' + resp.getResponseCode() };
+    const feed = sanitizeXmlForParsing(resp.getContentText());
+    const doc = XmlService.parse(feed);
+    const channel = doc.getRootElement().getChild('channel');
+    if (!channel) return { success: false, error: 'פורמט RSS לא תקין' };
+    
+    let description = '';
+    try {
+      const descEl = channel.getChild('description');
+      if (descEl) description = descEl.getValue().trim();
+    } catch(e) {}
+    
+    let link = '';
+    try {
+      const linkEl = channel.getChild('link');
+      if (linkEl) link = linkEl.getValue().trim();
+    } catch(e) {}
+
+    return { success: true, description: description, link: link };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 /** Returns episode list for a given RSS URL */
 function fetchEpisodeList(rssUrl) {
   try {
