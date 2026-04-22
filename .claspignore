@@ -1,0 +1,4 @@
+# This file is the landing page for GitHub Pages:
+# https://moyshiginzburg.github.io/podcast-to-drive
+# It is not needed in Google Apps Script and should be excluded from clasp.
+index.html
