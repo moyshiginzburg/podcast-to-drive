@@ -1,5 +1,9 @@
 # Change log
 
+## 2026-04-22
+
+- **Favicon Update:** Added the microphone (🎙) favicon to the GitHub Pages site (`index.html`) for brand consistency. Implemented favicon using SVG Data URI for better performance and cross-browser support.
+
 ## 2026-04-20
 
 - **RSS parse early exit for memory pressure:** `parseRSS` now accepts an optional subscription cutoff timestamp and evaluates `pubDate` before building episode objects. In automatic runs, parsing stops (`break`) as soon as it reaches an item older than the subscription date, so large feeds no longer allocate full episode arrays before filtering.
