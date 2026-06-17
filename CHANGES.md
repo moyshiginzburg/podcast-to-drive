@@ -75,3 +75,4 @@ complete file** using the [Drive Resumable Upload API](https://developers.google
 - **RSS add dialog visibility:** Fixed a sidebar CSS issue where the RSS URL dialog backdrop was missing default hidden styles and appeared even before clicking 🔗. RSS modal now follows the same hidden/visible behavior as OPML modal.
 - **Log links for split downloads:** The Log sheet now writes rich-text hyperlinks in the קישור cell, so when an episode has multiple Drive URLs (one per chunk), each URL is clickable on its own line.
 - **Log sheet:** Added a **קישור** (link) column. Successful downloads (manual and automatic) write Drive file URLs into that column; existing `Log` sheets gain the new header in column F on the next log write.
+\n- **Chore**: Increased scheduling delay for background triggers from 1 millisecond / 30 seconds to 1 minute to prevent Google Apps Script scheduler throttling.
