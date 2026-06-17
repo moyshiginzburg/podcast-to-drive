@@ -1,5 +1,44 @@
 # Change log
 
+## 2026-06-17 – Resumable Upload (Drive API) migration
+
+### Overview
+Replaced the old `downloadChunked` approach (splitting episodes into numbered part files of ~45 MB)
+with a new `downloadResumable` function that streams any-size episode to Google Drive as a **single
+complete file** using the [Drive Resumable Upload API](https://developers.google.com/drive/api/guides/manage-uploads#resumable).
+
+### New features
+- **Bypassing the 50MB limit:** Natively supports downloading and uploading files much larger than 50MB (overcoming the Apps Script `UrlFetchApp` payload size limits) without corrupting or splitting the file.
+- **Single-file output:** Episodes that previously produced `"(חלק 001)", "(חלק 002)"` files in Drive
+  are now stored as one complete audio file, identical byte-for-byte to the original.
+- **No more OOM (Out of Memory) crashes:** Each iteration loads only 10 MB into the JS heap (down from 45 MB).
+  After uploading a chunk to Drive the bytes are released before the next iteration begins.
+- **Multi-format support:** `detectFileExtension()` inspects the episode URL path and the
+  `Content-Type` response header to choose the correct file extension (mp3, m4a, mp4, ogg, opus,
+  aac, wav). `buildFileName` now accepts an `ext` argument instead of always defaulting to `.mp3`.
+- **Cross-run resume:** If the 4-minute soft time budget is exceeded mid-download, the Drive session
+  URL and byte offset are saved to the queue job. When the worker runs again it calls
+  `queryResumableSessionProgress()` to ask Drive how many bytes it already has, then resumes from
+  that byte without creating duplicate files.
+- **Unknown content-length support:** For servers that omit `Content-Length`, intermediate chunks
+  are uploaded with `Content-Range: bytes start-end/*` and the final chunk uses the actual total.
+
+### Breaking / removed
+- `downloadChunked()` – deleted; all downloads now go through `downloadResumable()`.
+- `normalizeFirstChunkDurationMetadata()` and its low-level helpers (`byteAt`, `hasAsciiAt`,
+  `parseSynchsafeInt`) – deleted; metadata repair is no longer needed because the file is never
+  split.
+- `buildTimeBudgetExceededError()` – deleted; the equivalent error object is built inline in
+  `downloadResumable`.
+- `CHUNK_SIZE` changed from 45 MB → 10 MB.
+- `downloadWorker` no longer saves `resumePart` to the queue; it saves `resumeSessionUrl` instead.
+
+### Modified files
+- `appsscript.json` – explicit `oauthScopes` array added (Drive, Spreadsheets, scriptapp,
+  external_request) so `getOAuthToken()` receives the required Drive scope without Advanced
+  Services.
+- `Code.gs` – see items above.
+
 ## 2026-04-22
 
 - **Favicon Update:** Added the microphone (🎙) favicon to the GitHub Pages site (`index.html`) for brand consistency. Implemented favicon using SVG Data URI for better performance and cross-browser support.

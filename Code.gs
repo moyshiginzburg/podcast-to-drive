@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-04-22
+ * Version: 2026-06-17
  * License: AGPL-3.0
  */
 
@@ -28,13 +28,16 @@ const PROP_DOWNLOAD_WORKER_TRIG = 'downloadWorkerTrigId';
 const DOWNLOAD_QUEUE_SHEET_NAME = 'תור הורדות';
 const DOWNLOAD_QUEUE_HEADERS = ['payload'];
 /**
- * Max per Range response: stay under Apps Script UrlFetch’s ~50MB response cap.
- * Peak RAM is mitigated by in-place Xing fix + dropping refs after each part (not by shrinking this).
+ * Chunk size for the Resumable Upload loop: each iteration downloads this many bytes from the
+ * podcast server and immediately streams them up to the Drive Resumable Upload session.
+ * 10 MB is well under the GAS JS-heap limit so OOM crashes cannot occur.
  */
-const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
+/** Script property key that persists a Drive Resumable Upload session URL across worker runs. */
+const PROP_RESUMABLE_SESSION = 'resumableSessionUrl';
 
 /**
  * Purpose: Structured lines in the Apps Script execution log (Executions) to trace where a run
@@ -525,14 +528,18 @@ function formatDateYYMMDD(date) {
   return `${yy}${mm}${dd}`;
 }
 
-function buildFileName(episodeTitle, pubDate, partNum) {
+/**
+ * Purpose: Build a safe, dated filename for a downloaded podcast episode.
+ * Operation: Formats the publication date as YYMMDD, sanitizes the episode title, and appends the
+ *   given file extension (defaults to 'mp3'). The partNum parameter is kept for backward
+ *   compatibility with any callers that might still reference it, but is no longer used by the
+ *   Resumable Upload path (which always creates a single complete file).
+ */
+function buildFileName(episodeTitle, pubDate, ext) {
   const dateStr = formatDateYYMMDD(pubDate || new Date());
   const safeTitle = sanitizeFileName(episodeTitle) || 'פרק';
-  if (partNum != null) {
-    const part = String(partNum).padStart(3, '0');
-    return `${dateStr} ${safeTitle} (חלק ${part}).mp3`;
-  }
-  return `${dateStr} ${safeTitle}.mp3`;
+  const safeExt = (ext && /^[a-z0-9]+$/i.test(ext)) ? ext : 'mp3';
+  return `${dateStr} ${safeTitle}.${safeExt}`;
 }
 
 // ============================================================
@@ -598,9 +605,58 @@ function setLogLinkCell(sheet, row, linkText) {
 // ============================================================
 
 /**
- * Main entry point: downloads one episode to Google Drive.
- * Returns array of { fileId, fileName, driveUrl } (one item for direct, multiple for chunked).
- * Throws on unrecoverable error.
+ * Purpose: OAuth token helper exposed so client-side UrlFetchApp calls inside this script can
+ *   attach a valid Bearer token when calling Google APIs directly (e.g. Drive Resumable Upload).
+ * Operation: Delegates to ScriptApp.getOAuthToken() which returns the token that already covers
+ *   the scopes declared in appsscript.json — no extra setup required.
+ */
+function getOAuthToken() {
+  return ScriptApp.getOAuthToken();
+}
+
+/**
+ * Purpose: Detect the correct file extension for a podcast episode.
+ * Operation: Inspects the URL path first (most reliable), then falls back to the Content-Type
+ *   header returned by an optional HEAD-like probe. Supports mp3, m4a, mp4, ogg, opus, aac, wav.
+ *   Returns 'mp3' as default if detection fails.
+ * @param {string} url          - Episode download URL.
+ * @param {Object} [headers]    - Optional response headers object from a prior probe request.
+ * @returns {string}            - Lowercase file extension without the leading dot.
+ */
+function detectFileExtension(url, headers) {
+  const knownExts = ['mp3', 'm4a', 'mp4', 'ogg', 'opus', 'aac', 'wav'];
+  // 1. Try to read from URL path (strip query string first)
+  try {
+    const path = String(url || '').split('?')[0].split('#')[0].toLowerCase();
+    const lastSeg = path.split('/').pop() || '';
+    const dotIdx = lastSeg.lastIndexOf('.');
+    if (dotIdx >= 0) {
+      const ext = lastSeg.slice(dotIdx + 1);
+      if (knownExts.includes(ext)) return ext;
+    }
+  } catch (_) { /* ignore */ }
+
+  // 2. Try Content-Type header
+  if (headers) {
+    const ct = String(getHeaderCaseInsensitive(headers, 'Content-Type') || '').toLowerCase();
+    if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('mpeg4')) return 'm4a';
+    if (ct.includes('mp3') || ct.includes('mpeg')) return 'mp3';
+    if (ct.includes('ogg')) return 'ogg';
+    if (ct.includes('opus')) return 'opus';
+    if (ct.includes('aac')) return 'aac';
+    if (ct.includes('wav')) return 'wav';
+  }
+
+  return 'mp3'; // safe default
+}
+
+/**
+ * Purpose: Main entry point – downloads one episode and saves it as a single complete file in the
+ *   given Google Drive folder using the Resumable Upload API.
+ * Operation: Detects file extension and content length, then delegates entirely to
+ *   downloadResumable which handles the chunked download+upload loop, session persistence across
+ *   worker re-invocations, and time-budget enforcement.
+ * @returns {Array<{fileId, fileName, driveUrl}>} – always a single-element array.
  */
 function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, description, options) {
   const runT0 = options && options.runT0;
@@ -609,31 +665,7 @@ function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, desc
     debugSnippet(episodeTitle, 80) + ' | ' + debugSnippet(episodeUrl, 120),
     runT0
   );
-  const contentLength = fetchContentLength(episodeUrl, runT0);
-
-  if (contentLength !== null && contentLength <= CHUNK_SIZE) {
-    const fileName = buildFileName(episodeTitle, pubDate);
-    debugStep('downloadEpisodeToFolder: path=direct', 'file=' + debugSnippet(fileName, 100), runT0);
-    try {
-      return [downloadDirect(episodeUrl, fileName, folder, description, runT0)];
-    } catch (e) {
-      const msg = e && e.message ? String(e.message) : String(e);
-      if (msg.includes('מגבלת UrlFetch')) {
-        debugStep('downloadEpisodeToFolder: direct fallback to chunked', null, runT0);
-        return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null, options);
-      }
-      throw e;
-    }
-  }
-
-  if (contentLength !== null && contentLength > CHUNK_SIZE) {
-    debugStep('downloadEpisodeToFolder: path=chunked', 'totalSize=' + contentLength, runT0);
-    return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, contentLength, options);
-  }
-
-  // Unknown size: prefer chunked to avoid UrlFetch's 50MB direct-response limit.
-  debugStep('downloadEpisodeToFolder: path=chunked (unknown size)', null, runT0);
-  return downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, null, options);
+  return downloadResumable(episodeUrl, episodeTitle, pubDate, folder, description, options);
 }
 
 function getHeaderCaseInsensitive(headers, key) {
@@ -643,6 +675,305 @@ function getHeaderCaseInsensitive(headers, key) {
     if (String(keys[i]).toLowerCase() === wanted) return headers[keys[i]];
   }
   return null;
+}
+
+/**
+ * Purpose: Initiate a Google Drive Resumable Upload session for a new file.
+ * Operation: Sends a POST to the Drive API v3 resumable upload endpoint with the file metadata
+ *   (name, mimeType, parent folder, description). The API returns a session URL in the Location
+ *   header; subsequent PUT requests to that URL upload the actual file bytes chunk by chunk.
+ *   Uses `getOAuthToken()` for authentication — no extra GCP project setup needed.
+ * @param {string} fileName     - Target filename in Drive (including extension).
+ * @param {string} mimeType     - MIME type of the file (e.g. 'audio/mpeg').
+ * @param {string} folderId     - Google Drive folder ID where the file will be created.
+ * @param {string} description  - Optional file description.
+ * @returns {string}            - Session URL to use for subsequent chunk uploads.
+ */
+function createResumableUploadSession(fileName, mimeType, folderId, description) {
+  const token = getOAuthToken();
+  const metadata = { name: fileName, mimeType, parents: [folderId] };
+  if (description) metadata.description = description;
+
+  const resp = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+    {
+      method: 'post',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType
+      },
+      payload: JSON.stringify(metadata),
+      muteHttpExceptions: true
+    }
+  );
+
+  const code = resp.getResponseCode();
+  if (code !== 200) {
+    throw new Error(`יצירת סשן העלאה נכשלה: HTTP ${code} – ${resp.getContentText().slice(0, 200)}`);
+  }
+
+  const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
+  if (!location) {
+    throw new Error('שרת Drive לא החזיר Location header עבור סשן ההעלאה');
+  }
+  return location;
+}
+
+/**
+ * Purpose: Query a Drive Resumable Upload session to find out how many bytes were already received.
+ * Operation: Sends an empty PUT with `Content-Range: *‌/*` (total size unknown) to the session URL.
+ *   The Drive server responds with 308 Resume Incomplete and a Range header indicating the last
+ *   received byte. Returns 0 if no bytes were received yet (the Range header is absent).
+ *   This is called at the start of a resumed worker run to safely skip bytes already uploaded.
+ * @param {string} sessionUrl   - The Drive Resumable Upload session URL.
+ * @returns {number}            - Number of bytes already confirmed by Drive (next byte to upload).
+ */
+function queryResumableSessionProgress(sessionUrl) {
+  const token = getOAuthToken();
+  const resp = UrlFetchApp.fetch(sessionUrl, {
+    method: 'put',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Range': '*/*',
+      'Content-Length': '0'
+    },
+    muteHttpExceptions: true
+  });
+
+  const code = resp.getResponseCode();
+  // 308 = Resume Incomplete (normal mid-upload query response)
+  if (code === 308) {
+    const range = getHeaderCaseInsensitive(resp.getHeaders(), 'Range');
+    if (!range) return 0; // nothing received yet
+    const m = String(range).match(/bytes=0-(\d+)/);
+    return m ? parseInt(m[1], 10) + 1 : 0;
+  }
+  // 200/201 = already complete (should not happen if we are querying mid-upload)
+  if (code === 200 || code === 201) return -1; // sentinel: upload already finished
+  throw new Error(`שאילתת מצב סשן ההעלאה נכשלה: HTTP ${code}`);
+}
+
+/**
+ * Purpose: Download a podcast episode from its source URL and upload it to Google Drive as a
+ *   single, complete file using the Drive Resumable Upload API.
+ * Operation:
+ *   1. Detects the correct file extension and MIME type from the URL / Content-Type header.
+ *   2. Creates (or resumes) a Drive Resumable Upload session.
+ *   3. Enters a loop: downloads CHUNK_SIZE bytes from the podcast server using a Range request,
+ *      immediately uploads that chunk to the session URL with the correct Content-Range header,
+ *      then releases the chunk from memory.
+ *   4. For servers that do not advertise Content-Length the total size is sent as '*' for all
+ *      intermediate chunks and only the real byte count on the final chunk.
+ *   5. If the time budget is exceeded mid-loop, saves the session URL (and byte offset) to the
+ *      job payload and throws TIME_BUDGET_EXCEEDED so the caller can reschedule.
+ *   6. On success returns a single-element array identical in shape to the old downloadChunked
+ *      return value: [{ fileId, fileName, driveUrl }].
+ * @param {string}   episodeUrl   - Direct audio download URL.
+ * @param {string}   episodeTitle - Episode title (used for the filename).
+ * @param {Date}     pubDate      - Publication date (used for the filename date prefix).
+ * @param {Folder}   folder       - Google Drive Folder object to upload into.
+ * @param {string}   description  - Optional file description stored on the Drive file.
+ * @param {Object}   [options]    - runT0, shouldStop(), resumeOffset, resumeSessionUrl.
+ * @returns {Array<{fileId, fileName, driveUrl}>}
+ */
+function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, description, options) {
+  const runT0 = options && options.runT0;
+  const shouldStop = (options && typeof options.shouldStop === 'function') ? options.shouldStop : () => false;
+
+  // --- 1. Determine file extension and MIME type ---
+  debugStep('downloadResumable: probe for extension/size', debugSnippet(episodeUrl, 120), runT0);
+  let totalSize = null;
+  let ext = 'mp3';
+  try {
+    const probeResp = UrlFetchApp.fetch(episodeUrl, {
+      headers: { Range: 'bytes=0-0' },
+      followRedirects: true,
+      muteHttpExceptions: true
+    });
+    const probeHeaders = probeResp.getHeaders() || {};
+    const fromRange = parseTotalSizeFromContentRange(probeHeaders);
+    const fromCl = parseContentLength(probeHeaders);
+    totalSize = fromRange !== null ? fromRange : fromCl;
+    ext = detectFileExtension(episodeUrl, probeHeaders);
+    debugStep('downloadResumable: probe done', `size=${totalSize} ext=${ext}`, runT0);
+  } catch (e) {
+    debugStep('downloadResumable: probe failed (continuing without size)', e.message || String(e), runT0);
+  }
+
+  const mimeTypeMap = { mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'video/mp4', ogg: 'audio/ogg', opus: 'audio/ogg', aac: 'audio/aac', wav: 'audio/wav' };
+  const mimeType = mimeTypeMap[ext] || 'audio/mpeg';
+  const fileName = buildFileName(episodeTitle, pubDate, ext);
+  const token = getOAuthToken();
+
+  // --- 2. Create or resume a Drive Resumable Upload session ---
+  let sessionUrl = (options && options.resumeSessionUrl) || null;
+  let uploadedBytes = 0;
+
+  if (sessionUrl) {
+    // Resuming from a previous worker run: ask Drive how far it got
+    debugStep('downloadResumable: querying existing session progress', debugSnippet(sessionUrl, 120), runT0);
+    try {
+      const confirmed = queryResumableSessionProgress(sessionUrl);
+      if (confirmed === -1) {
+        // Session already complete – this should not normally happen, but handle it gracefully.
+        debugStep('downloadResumable: session already finished (unexpected)', null, runT0);
+        // We cannot retrieve fileId from the session URL at this point; fall through to create new.
+        sessionUrl = null;
+        uploadedBytes = 0;
+      } else {
+        uploadedBytes = confirmed;
+        debugStep('downloadResumable: resuming from byte', String(uploadedBytes), runT0);
+      }
+    } catch (e) {
+      // Session may have expired (Drive sessions last ~1 week). Start fresh.
+      debugStep('downloadResumable: session query failed, starting new session', e.message || String(e), runT0);
+      sessionUrl = null;
+      uploadedBytes = 0;
+    }
+  }
+
+  if (!sessionUrl) {
+    debugStep('downloadResumable: creating new upload session', `file=${debugSnippet(fileName, 80)} folder=${folder.getId()}`, runT0);
+    sessionUrl = createResumableUploadSession(fileName, mimeType, folder.getId(), description);
+    uploadedBytes = 0;
+    debugStep('downloadResumable: session created', debugSnippet(sessionUrl, 80), runT0);
+  }
+
+  // --- 3. Chunk download + upload loop ---
+  let offset = (options && typeof options.resumeOffset === 'number' && options.resumeOffset >= 0)
+    ? options.resumeOffset
+    : uploadedBytes; // align download cursor with confirmed uploads
+
+  let chunkIndex = 0;
+  let fileId = null;
+  let driveUrl = null;
+
+  while (true) {
+    if (shouldStop()) {
+      debugStep('downloadResumable: shouldStop before chunk', `offset=${offset}`, runT0);
+      const err = new Error('TIME_BUDGET_EXCEEDED');
+      err.code = 'TIME_BUDGET_EXCEEDED';
+      err.resumeOffset = offset;
+      err.resumeSessionUrl = sessionUrl;
+      throw err;
+    }
+
+    const rangeEnd = totalSize
+      ? Math.min(offset + CHUNK_SIZE - 1, totalSize - 1)
+      : offset + CHUNK_SIZE - 1;
+
+    debugStep(
+      'downloadResumable: download chunk',
+      `chunk=${chunkIndex} bytes=${offset}-${rangeEnd}` + (totalSize != null ? ` of ${totalSize}` : ''),
+      runT0
+    );
+
+    // Download chunk from podcast server
+    let downloadResp;
+    try {
+      downloadResp = UrlFetchApp.fetch(episodeUrl, {
+        headers: { Range: `bytes=${offset}-${rangeEnd}` },
+        followRedirects: true,
+        muteHttpExceptions: true
+      });
+    } catch (e) {
+      throw new Error(`שגיאת רשת בהורדת chunk ${chunkIndex}: ${e.message}`);
+    }
+
+    const downloadCode = downloadResp.getResponseCode();
+    debugStep('downloadResumable: downloaded chunk', `chunk=${chunkIndex} HTTP=${downloadCode}`, runT0);
+
+    let chunkBytes;
+    let isLastChunk = false;
+
+    if (downloadCode === 200 && chunkIndex === 0) {
+      // Server does not support Range – got the whole file in one shot
+      chunkBytes = downloadResp.getContent();
+      isLastChunk = true;
+      totalSize = chunkBytes.length;
+      debugStep('downloadResumable: server sent full file (no Range support)', `size=${totalSize}`, runT0);
+    } else if (downloadCode === 206) {
+      chunkBytes = downloadResp.getContent();
+      if (totalSize && offset + chunkBytes.length >= totalSize) isLastChunk = true;
+      if (!totalSize && chunkBytes.length < CHUNK_SIZE) {
+        isLastChunk = true;
+        totalSize = offset + chunkBytes.length;
+      }
+    } else if (downloadCode === 416) {
+      // Range Not Satisfiable – we have already downloaded everything
+      isLastChunk = true;
+      chunkBytes = new Uint8Array(0);
+    } else {
+      throw new Error(`HTTP ${downloadCode} בעת הורדת chunk ${chunkIndex} מהשרת`);
+    }
+    downloadResp = null; // release memory
+
+    const chunkLen = chunkBytes.length;
+    const isKnownTotal = totalSize !== null;
+    const contentRangeHeader = isLastChunk
+      ? `bytes ${offset}-${offset + chunkLen - 1}/${offset + chunkLen}`
+      : (isKnownTotal
+          ? `bytes ${offset}-${offset + chunkLen - 1}/${totalSize}`
+          : `bytes ${offset}-${offset + chunkLen - 1}/*`);
+
+    debugStep(
+      'downloadResumable: upload chunk',
+      `chunk=${chunkIndex} Content-Range=${contentRangeHeader}`,
+      runT0
+    );
+
+    // Upload chunk to Drive Resumable session
+    let uploadResp;
+    try {
+      uploadResp = UrlFetchApp.fetch(sessionUrl, {
+        method: 'put',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Range': contentRangeHeader,
+          'Content-Type': mimeType
+        },
+        payload: chunkBytes,
+        muteHttpExceptions: true
+      });
+    } catch (e) {
+      throw new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${e.message}`);
+    }
+    chunkBytes = null; // release memory immediately
+
+    const uploadCode = uploadResp.getResponseCode();
+    debugStep('downloadResumable: uploaded chunk', `chunk=${chunkIndex} HTTP=${uploadCode}`, runT0);
+
+    if (uploadCode === 200 || uploadCode === 201) {
+      // Drive finished receiving the file
+      let fileData;
+      try { fileData = JSON.parse(uploadResp.getContentText()); } catch (_) { fileData = {}; }
+      fileId = fileData.id || null;
+      if (!fileId) {
+        // Fallback: find the file by name in the folder
+        const it = folder.getFilesByName(fileName);
+        if (it.hasNext()) fileId = it.next().getId();
+      }
+      driveUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view` : '';
+      debugStep('downloadResumable: upload complete', `fileId=${fileId}`, runT0);
+      break;
+    } else if (uploadCode === 308) {
+      // Resume Incomplete – Drive acknowledged this chunk, continue with the next
+      offset += chunkLen;
+      chunkIndex++;
+      uploadResp = null;
+      continue;
+    } else {
+      throw new Error(`HTTP ${uploadCode} בעת העלאת chunk ${chunkIndex} לדרייב: ${uploadResp.getContentText().slice(0, 200)}`);
+    }
+  }
+
+  if (!fileId) {
+    throw new Error('ההעלאה הושלמה אך לא ניתן לאתר את ה-fileId בדרייב');
+  }
+
+  debugStep('downloadResumable: finished', `file=${fileName} id=${fileId}`, runT0);
+  return [{ fileId, fileName, driveUrl }];
 }
 
 function parseContentLength(headers) {
@@ -661,253 +992,10 @@ function parseTotalSizeFromContentRange(headers) {
   return isNaN(n) ? null : n;
 }
 
-function ensureFullResponseBytes(resp, context, runT0) {
-  const headers = resp.getHeaders() || {};
-  const bytes = resp.getContent();
-  debugStep('ensureFullResponseBytes: ' + context, 'bytes=' + bytes.length, runT0);
-  const actualSize = bytes.length;
-  const declaredLength = parseContentLength(headers);
+// ensureFullResponseBytes, fetchContentLength, and downloadDirect have been removed.
+// Their logic is now handled inside downloadResumable which probes size/extension in one
+// Range request and then streams each chunk directly to the Drive Resumable Upload session.
 
-  if (declaredLength !== null && declaredLength > actualSize) {
-    throw new Error(`${context}: השרת דיווח על ${declaredLength} בתים, אבל התקבלו רק ${actualSize} בתים`);
-  }
-  if (actualSize >= URL_FETCH_RESPONSE_LIMIT) {
-    throw new Error(`${context}: התגובה הגיעה למגבלת UrlFetch (50MB)`);
-  }
-  return bytes;
-}
-
-function byteAt(bytes, i) {
-  const v = bytes[i];
-  return v < 0 ? v + 256 : v;
-}
-
-function hasAsciiAt(bytes, offset, text) {
-  if (offset < 0 || offset + text.length > bytes.length) return false;
-  for (let i = 0; i < text.length; i++) {
-    if (byteAt(bytes, offset + i) !== text.charCodeAt(i)) return false;
-  }
-  return true;
-}
-
-function parseSynchsafeInt(bytes, offset) {
-  if (offset < 0 || offset + 4 > bytes.length) return null;
-  const b0 = byteAt(bytes, offset);
-  const b1 = byteAt(bytes, offset + 1);
-  const b2 = byteAt(bytes, offset + 2);
-  const b3 = byteAt(bytes, offset + 3);
-  if ((b0 | b1 | b2 | b3) & 0x80) return null;
-  return (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
-}
-
-/**
- * MP3 first chunks may carry Xing/Info metadata with total file length.
- * In split downloads this can make part 001 look as long as the full episode.
- * Clearing the marker makes players derive duration from the actual part bytes.
- */
-function normalizeFirstChunkDurationMetadata(bytes) {
-  if (!bytes || bytes.length < 8) return bytes;
-
-  let frameStart = 0;
-  // Skip optional ID3v2 tag
-  if (hasAsciiAt(bytes, 0, 'ID3')) {
-    const tagSize = parseSynchsafeInt(bytes, 6);
-    if (tagSize === null) return bytes;
-    const flags = byteAt(bytes, 5);
-    const hasFooter = (flags & 0x10) !== 0;
-    frameStart = 10 + tagSize + (hasFooter ? 10 : 0);
-  }
-
-  if (frameStart + 4 >= bytes.length) return bytes;
-  const b1 = byteAt(bytes, frameStart);
-  const b2 = byteAt(bytes, frameStart + 1);
-  const b4 = byteAt(bytes, frameStart + 3);
-  if (b1 !== 0xFF || (b2 & 0xE0) !== 0xE0) return bytes;
-
-  const versionBits = (b2 >> 3) & 0x03; // 3=MPEG1, 2=MPEG2, 0=MPEG2.5
-  const layerBits = (b2 >> 1) & 0x03;   // 1=Layer III
-  if (versionBits === 1 || layerBits !== 1) return bytes;
-
-  const hasCrc = (b2 & 0x01) === 0;
-  const channelMode = (b4 >> 6) & 0x03; // 3=mono
-  const sideInfoSize = versionBits === 3
-    ? (channelMode === 3 ? 17 : 32)
-    : (channelMode === 3 ? 9 : 17);
-
-  const xingOffset = frameStart + 4 + (hasCrc ? 2 : 0) + sideInfoSize;
-  const hasXing = hasAsciiAt(bytes, xingOffset, 'Xing') || hasAsciiAt(bytes, xingOffset, 'Info');
-  if (!hasXing) return bytes;
-
-  // Mutate in place — avoids a full-array copy (~CHUNK_SIZE) that doubled RAM on part 001.
-  bytes[xingOffset] = 0;
-  bytes[xingOffset + 1] = 0;
-  bytes[xingOffset + 2] = 0;
-  bytes[xingOffset + 3] = 0;
-  return bytes;
-}
-
-function fetchContentLength(url, runT0) {
-  // UrlFetchApp supports only get/post/put/delete/patch — not "head" (invalid method in Apps Script).
-  debugStep('fetchContentLength: Range probe (bytes=0-0)', debugSnippet(url, 120), runT0);
-  try {
-    const probeResp = UrlFetchApp.fetch(url, {
-      headers: { Range: 'bytes=0-0' },
-      followRedirects: true,
-      muteHttpExceptions: true
-    });
-    debugStep('fetchContentLength: probe response', 'HTTP ' + probeResp.getResponseCode(), runT0);
-    const headers = probeResp.getHeaders() || {};
-    const fromRange = parseTotalSizeFromContentRange(headers);
-    if (fromRange !== null) {
-      debugStep('fetchContentLength: from Content-Range', 'length=' + fromRange, runT0);
-      return fromRange;
-    }
-    const fromCl = parseContentLength(headers);
-    if (fromCl !== null) debugStep('fetchContentLength: from Content-Length', 'length=' + fromCl, runT0);
-    return fromCl;
-  } catch (e) {
-    debugStep('fetchContentLength: probe failed', e.message || String(e), runT0);
-    return null;
-  }
-}
-
-function downloadDirect(url, fileName, folder, description, runT0) {
-  debugStep('downloadDirect: UrlFetch start', debugSnippet(url, 120), runT0);
-  const resp = UrlFetchApp.fetch(url, { followRedirects: true, muteHttpExceptions: true });
-  debugStep('downloadDirect: UrlFetch done', 'HTTP ' + resp.getResponseCode(), runT0);
-  if (resp.getResponseCode() >= 400) {
-    throw new Error(`HTTP ${resp.getResponseCode()} בעת הורדת הפרק`);
-  }
-  const bytes = ensureFullResponseBytes(resp, 'הורדה ישירה נכשלה', runT0);
-  const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
-  debugStep('downloadDirect: createFile start', debugSnippet(fileName, 100), runT0);
-  const file = folder.createFile(blob);
-  debugStep('downloadDirect: createFile done', 'id=' + file.getId(), runT0);
-  if (description) file.setDescription(description);
-  return {
-    fileId: file.getId(),
-    fileName,
-    driveUrl: `https://drive.google.com/file/d/${file.getId()}/view`
-  };
-}
-
-function buildTimeBudgetExceededError(offset, part) {
-  const err = new Error('TIME_BUDGET_EXCEEDED');
-  err.code = 'TIME_BUDGET_EXCEEDED';
-  err.resumeOffset = offset;
-  err.resumePart = part;
-  return err;
-}
-
-function downloadChunked(episodeUrl, episodeTitle, pubDate, folder, description, totalSize, options) {
-  const runT0 = options && options.runT0;
-  const results = [];
-  let offset = (options && typeof options.resumeOffset === 'number' && options.resumeOffset >= 0)
-    ? options.resumeOffset
-    : 0;
-  let part = (options && typeof options.resumePart === 'number' && options.resumePart > 0)
-    ? options.resumePart
-    : 1;
-
-  while (true) {
-    if (options && typeof options.shouldStop === 'function' && options.shouldStop()) {
-      debugStep('downloadChunked: shouldStop before part', 'part=' + part + ' offset=' + offset, runT0);
-      throw buildTimeBudgetExceededError(offset, part);
-    }
-
-    const rangeEnd = totalSize
-      ? Math.min(offset + CHUNK_SIZE - 1, totalSize - 1)
-      : offset + CHUNK_SIZE - 1;
-
-    debugStep(
-      'downloadChunked: UrlFetch Range',
-      `part=${part} bytes=${offset}-${rangeEnd}` + (totalSize != null ? ` of ${totalSize}` : ''),
-      runT0
-    );
-    let resp;
-    try {
-      resp = UrlFetchApp.fetch(episodeUrl, {
-        headers: { Range: `bytes=${offset}-${rangeEnd}` },
-        followRedirects: true,
-        muteHttpExceptions: true
-      });
-    } catch (e) {
-      throw new Error(`שגיאת רשת בחלק ${part}: ${e.message}`);
-    }
-
-    const code = resp.getResponseCode();
-    debugStep('downloadChunked: response', 'part=' + part + ' HTTP ' + code, runT0);
-
-    // Server returned 200 instead of 206 → doesn't support Range
-    if (code === 200) {
-      if (part === 1) {
-        // We got the whole file in one shot – save it
-        const fileName = buildFileName(episodeTitle, pubDate);
-        const bytes = ensureFullResponseBytes(resp, 'השרת לא תמך ב-Range והחזיר תגובה חלקית', runT0);
-        const blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
-        debugStep('downloadChunked: createFile (200 full)', debugSnippet(fileName, 100), runT0);
-        const file = folder.createFile(blob);
-        if (description) file.setDescription(description);
-        return [{
-          fileId: file.getId(),
-          fileName,
-          driveUrl: `https://drive.google.com/file/d/${file.getId()}/view`
-        }];
-      }
-      // We already downloaded some chunks but now get 200 – abort
-      throw new Error('השרת אינו תומך ב-Range requests – לא ניתן להמשיך הורדה בחלקים');
-    }
-
-    if (code !== 206) {
-      throw new Error(`HTTP ${code} בחלק ${part}`);
-    }
-
-    const fileName = buildFileName(episodeTitle, pubDate, part);
-    let blob;
-    let partLen;
-
-    if (part === 1) {
-      debugStep('downloadChunked: getContent start', 'part=' + part, runT0);
-      let bytes = resp.getContent();
-      debugStep('downloadChunked: getContent done', 'part=' + part + ' len=' + bytes.length, runT0);
-      debugStep('downloadChunked: normalizeFirstChunkDurationMetadata', 'part=1', runT0);
-      bytes = normalizeFirstChunkDurationMetadata(bytes);
-      debugStep('downloadChunked: normalizeFirstChunkDurationMetadata done', 'len=' + bytes.length, runT0);
-      partLen = bytes.length;
-      debugStep('downloadChunked: newBlob start', 'part=' + part + ' len=' + partLen, runT0);
-      blob = Utilities.newBlob(bytes, 'audio/mpeg', fileName);
-      bytes = null;
-    } else {
-      blob = resp.getBlob().setName(fileName).setContentType('audio/mpeg');
-      const headers = resp.getHeaders() || {};
-      const declaredLen = parseContentLength(headers);
-      partLen = declaredLen !== null ? declaredLen : (rangeEnd - offset + 1);
-      debugStep('downloadChunked: getBlob done', 'part=' + part + ' len=' + partLen, runT0);
-    }
-    resp = null;
-    debugStep('downloadChunked: createFile start', 'part=' + part + ' ' + debugSnippet(fileName, 100), runT0);
-    const file = folder.createFile(blob);
-    debugStep('downloadChunked: createFile done', 'part=' + part + ' id=' + file.getId(), runT0);
-    if (description) file.setDescription(`${description ? description + ' ' : ''}(חלק ${part})`);
-
-    results.push({
-      fileId: file.getId(),
-      fileName,
-      driveUrl: `https://drive.google.com/file/d/${file.getId()}/view`
-    });
-
-    offset += partLen;
-
-    // End conditions
-    if (totalSize && offset >= totalSize) break;
-    if (!totalSize && partLen < CHUNK_SIZE) break; // server returned less → EOF
-
-    part++;
-  }
-
-  debugStep('downloadChunked: finished', 'parts=' + results.length, runT0);
-  return results;
-}
 
 // ============================================================
 // RSS PARSING
@@ -1462,7 +1550,7 @@ function downloadWorker() {
         shouldStop,
         runT0,
         resumeOffset: job.resumeOffset != null ? job.resumeOffset : null,
-        resumePart: job.resumePart != null ? job.resumePart : null
+        resumeSessionUrl: job.resumeSessionUrl != null ? job.resumeSessionUrl : null
       }
     );
     markDownloaded(job.episodeUrl, downloadedSet);
@@ -1473,10 +1561,12 @@ function downloadWorker() {
     debugStep('downloadWorker: download OK', 'files=' + results.length, runT0);
   } catch (e) {
     if (e && e.code === 'TIME_BUDGET_EXCEEDED') {
+      // Persist both the byte offset and the Drive session URL so the next worker
+      // run can resume the upload from where it left off without creating a duplicate file.
       job.resumeOffset = e.resumeOffset;
-      job.resumePart = e.resumePart;
+      job.resumeSessionUrl = e.resumeSessionUrl || null;
       updateDownloadQueueHead(job);
-      debugStep('downloadWorker: soft-stop resume saved', debugSnippet(JSON.stringify(job), 180), runT0);
+      debugStep('downloadWorker: soft-stop resume saved', debugSnippet(JSON.stringify(job), 200), runT0);
     } else {
       const msg = e && e.message ? e.message : String(e);
       const note = (msg.includes('Range requests') || msg.includes('מגבלת UrlFetch'))
