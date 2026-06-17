@@ -35,7 +35,7 @@ const DOWNLOAD_QUEUE_HEADERS = ['payload'];
 const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const SOFT_STOP_MS = 4 * 60 * 1000;
-const RESUME_TRIGGER_DELAY_MS = 30 * 1000;
+const RESUME_TRIGGER_DELAY_MS = 60 * 1000; // 1 minute (to prevent Google scheduler throttling)
 /** Script property key that persists a Drive Resumable Upload session URL across worker runs. */
 const PROP_RESUMABLE_SESSION = 'resumableSessionUrl';
 
@@ -1211,7 +1211,7 @@ function downloadEpisode(episodeData) {
     });
 
     // Fire the worker immediately (1 ms delay = as soon as possible)
-    scheduleDownloadWorkerAfterMs(1);
+    scheduleDownloadWorkerAfterMs(60 * 1000);
 
     debugStep(
       'downloadEpisode (sidebar): enqueued and worker scheduled',
@@ -1414,7 +1414,7 @@ function podcastManager() {
     props.deleteProperty(PROP_RESUME);
     deleteOneTimeTrigger();
     if (getDownloadQueueLength() > 0) {
-      scheduleDownloadWorkerAfterMs(1);
+      scheduleDownloadWorkerAfterMs(60 * 1000);
     }
     props.setProperty(PROP_LAST_RUN, String(Date.now()));
     return;
@@ -1524,7 +1524,7 @@ function podcastManager() {
 
   if (stopRequested) {
     if (getDownloadQueueLength() > 0) {
-      scheduleDownloadWorkerAfterMs(1);
+      scheduleDownloadWorkerAfterMs(60 * 1000);
     }
     debugStep('podcastManager: exit (stopRequested / resume scheduled)', null, runT0);
     return;
@@ -1540,7 +1540,7 @@ function podcastManager() {
   props.deleteProperty(PROP_RESUME);
   deleteOneTimeTrigger();
   if (getDownloadQueueLength() > 0) {
-    scheduleDownloadWorkerAfterMs(1);
+    scheduleDownloadWorkerAfterMs(60 * 1000);
     debugStep('podcastManager: scheduled downloadWorker', 'queue=' + getDownloadQueueLength(), runT0);
   }
   if (!driveFull) {
@@ -1576,7 +1576,7 @@ function downloadWorker() {
     debugStep('downloadWorker: skip downloaded', debugSnippet(job.episodeUrl, 100), runT0);
     shiftDownloadQueue();
     saveDownloadedSet(downloadedSet);
-    if (getDownloadQueueLength() > 0) scheduleDownloadWorkerAfterMs(1);
+    if (getDownloadQueueLength() > 0) scheduleDownloadWorkerAfterMs(60 * 1000);
     return;
   }
 
@@ -1623,7 +1623,7 @@ function downloadWorker() {
   }
 
   if (getDownloadQueueLength() > 0) {
-    scheduleDownloadWorkerAfterMs(1);
+    scheduleDownloadWorkerAfterMs(60 * 1000);
     debugStep('downloadWorker: rescheduled', 'queue=' + getDownloadQueueLength(), runT0);
   } else {
     deleteDownloadWorkerTrigger();
