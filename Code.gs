@@ -738,7 +738,7 @@ function queryResumableSessionProgress(sessionUrl) {
     method: 'put',
     headers: {
       Authorization: 'Bearer ' + token,
-      'Content-Range': '*/*'
+      'Content-Range': 'bytes */*'
     },
     payload: new Uint8Array(0),
     muteHttpExceptions: true
