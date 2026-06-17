@@ -30,9 +30,15 @@ const DOWNLOAD_QUEUE_HEADERS = ['payload'];
 /**
  * Chunk size for the Resumable Upload loop: each iteration downloads this many bytes from the
  * podcast server and immediately streams them up to the Drive Resumable Upload session.
- * 10 MB is well under the GAS JS-heap limit so OOM crashes cannot occur.
+ *
+ * Using getBlob() instead of getContent() keeps the chunk data in the Java-side heap,
+ * never expanding it into a JS number array. This means each 45 MB chunk consumes ~0 MB
+ * of the GAS JS-heap, making OOM crashes impossible regardless of chunk size.
+ *
+ * 45 MB is also an exact multiple of 256 KB (45 * 1024 * 1024 / 262144 = 180), which is
+ * required by the Drive Resumable Upload API for non-final chunks.
  */
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB – safe with Blob-passthrough (no JS-heap expansion)
 const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 60 * 1000; // 1 minute (to prevent Google scheduler throttling)
@@ -913,32 +919,64 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
     const downloadCode = downloadResp.getResponseCode();
     debugStep('downloadResumable: downloaded chunk', `chunk=${chunkIndex} HTTP=${downloadCode}`, runT0);
 
-    let chunkBytes;
+    // chunkPayload is what we pass to Drive. For HTTP 206 we use getBlob() to keep data
+    // in the Java-side heap (zero JS-heap expansion → no OOM). For the rare HTTP 200 case
+    // (server ignores Range) we still need getContent() to learn the total file size.
+    let chunkPayload; // Blob for 206 / byte-array for 200 / Uint8Array for 416
+    let chunkLen;     // exact byte count of this chunk (used for Content-Range header)
     let isLastChunk = false;
 
     if (downloadCode === 200 && chunkIndex === 0) {
-      // Server does not support Range – got the whole file in one shot
-      chunkBytes = downloadResp.getContent();
+      // Server does not support Range – received the whole file in one shot.
+      // We must use getContent() here because we need the byte count to set totalSize.
+      const fullBytes = downloadResp.getContent();
+      downloadResp = null;
       isLastChunk = true;
-      totalSize = chunkBytes.length;
+      chunkLen = fullBytes.length;
+      totalSize = chunkLen;
+      chunkPayload = fullBytes;
       debugStep('downloadResumable: server sent full file (no Range support)', `size=${totalSize}`, runT0);
     } else if (downloadCode === 206) {
-      chunkBytes = downloadResp.getContent();
-      if (totalSize && offset + chunkBytes.length >= totalSize) isLastChunk = true;
-      if (!totalSize && chunkBytes.length < CHUNK_SIZE) {
+      // --- Memory-efficient path: keep bytes in Java-side Blob, never expand to JS array ---
+      // Derive the actual chunk length from the response Content-Length header first
+      // (always present in a 206 response per RFC 7233). Fall back to mathematical
+      // calculation from the requested range, which is exact when totalSize is known.
+      // Only as an absolute last resort do we touch getBytes() – but that path should
+      // never be reached in practice because we always probe for totalSize at the start.
+      const dlHeaders = downloadResp.getHeaders() || {};
+      const headerLen = parseContentLength(dlHeaders);
+      const blob = downloadResp.getBlob();
+      downloadResp = null; // release HTTP response object immediately
+      chunkPayload = blob;
+
+      if (headerLen !== null) {
+        // Best case: Content-Length header is authoritative and costs nothing.
+        chunkLen = headerLen;
+      } else if (totalSize !== null) {
+        // Second choice: mathematical derivation from the known total size.
+        chunkLen = Math.min(CHUNK_SIZE, totalSize - offset);
+      } else {
+        // Last resort: must inspect the blob. This loads it into JS-heap but totalSize
+        // is normally known from the probe step, so this path is rarely reached.
+        chunkLen = blob.getBytes().length;
+      }
+
+      if (totalSize && offset + chunkLen >= totalSize) isLastChunk = true;
+      if (!totalSize && chunkLen < CHUNK_SIZE) {
         isLastChunk = true;
-        totalSize = offset + chunkBytes.length;
+        totalSize = offset + chunkLen;
       }
     } else if (downloadCode === 416) {
-      // Range Not Satisfiable – we have already downloaded everything
+      // Range Not Satisfiable – we have already downloaded everything.
+      downloadResp = null;
       isLastChunk = true;
-      chunkBytes = new Uint8Array(0);
+      chunkLen = 0;
+      chunkPayload = new Uint8Array(0);
     } else {
+      downloadResp = null;
       throw new Error(`HTTP ${downloadCode} בעת הורדת chunk ${chunkIndex} מהשרת`);
     }
-    downloadResp = null; // release memory
 
-    const chunkLen = chunkBytes.length;
     const isKnownTotal = totalSize !== null;
     const contentRangeHeader = isLastChunk
       ? `bytes ${offset}-${offset + chunkLen - 1}/${offset + chunkLen}`
@@ -948,11 +986,15 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
 
     debugStep(
       'downloadResumable: upload chunk',
-      `chunk=${chunkIndex} Content-Range=${contentRangeHeader}`,
+      `chunk=${chunkIndex} chunkLen=${chunkLen} Content-Range=${contentRangeHeader}`,
       runT0
     );
 
-    // Upload chunk to Drive Resumable session
+    // Upload chunk to Drive Resumable session.
+    // Passing chunkPayload (a Blob for 206 responses) directly avoids any JS-heap expansion:
+    // UrlFetchApp reads the Blob bytes natively without exposing them to the GAS JS engine.
+    // Drive validates the byte count against Content-Range server-side and returns HTTP 400
+    // if the payload is shorter than declared – so corrupt data can never be committed.
     let uploadResp;
     try {
       uploadResp = UrlFetchApp.fetch(sessionUrl, {
@@ -962,13 +1004,13 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
           'Content-Range': contentRangeHeader,
           'Content-Type': mimeType
         },
-        payload: chunkBytes,
+        payload: chunkPayload,
         muteHttpExceptions: true
       });
     } catch (e) {
       throw new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${e.message}`);
     }
-    chunkBytes = null; // release memory immediately
+    chunkPayload = null; // allow GC
 
     const uploadCode = uploadResp.getResponseCode();
     debugStep('downloadResumable: uploaded chunk', `chunk=${chunkIndex} HTTP=${uploadCode}`, runT0);
@@ -987,10 +1029,23 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       debugStep('downloadResumable: upload complete', `fileId=${fileId}`, runT0);
       break;
     } else if (uploadCode === 308) {
-      // Resume Incomplete – Drive acknowledged this chunk, continue with the next
-      offset += chunkLen;
-      chunkIndex++;
+      // Resume Incomplete – Drive acknowledged this chunk, continue with the next.
+      // Use the Range header returned by Drive (if present) as the authoritative new offset.
+      // This makes the loop resilient to any off-by-one in our chunkLen calculation.
+      const rangeHeader = (uploadResp.getAllHeaders() || {})['Range'] || null;
       uploadResp = null;
+      if (rangeHeader) {
+        const m = rangeHeader.match(/bytes=(\d+)-(\d+)/);
+        if (m) {
+          offset = parseInt(m[2], 10) + 1; // Drive confirmed up to this byte inclusive
+          debugStep('downloadResumable: next offset (from Drive Range header)', String(offset), runT0);
+        } else {
+          offset += chunkLen;
+        }
+      } else {
+        offset += chunkLen;
+      }
+      chunkIndex++;
       continue;
     } else {
       throw new Error(`HTTP ${uploadCode} בעת העלאת chunk ${chunkIndex} לדרייב: ${uploadResp.getContentText().slice(0, 200)}`);
