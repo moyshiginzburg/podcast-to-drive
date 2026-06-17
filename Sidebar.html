@@ -708,7 +708,14 @@ function triggerDownload(btn, ep) {
 
   google.script.run
     .withSuccessHandler(result => {
-      if (result.success) {
+      if (result.queued) {
+        // Episode was enqueued – the worker will handle the actual download in the background.
+        // Show "in queue" state immediately without blocking the UI.
+        btn.classList.add('success');
+        btn.disabled = true;
+        btn.textContent = result.alreadyQueued ? '✓ כבר בתור' : '✓ בתור';
+      } else if (result.success) {
+        // Legacy direct-download path (kept for safety – not expected to be reached)
         btn.classList.add('success');
         if (result.files && result.files.length === 1) {
           const link = document.createElement('a');

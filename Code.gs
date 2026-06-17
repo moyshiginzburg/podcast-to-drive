@@ -449,6 +449,28 @@ function shiftDownloadQueue() {
 }
 
 /**
+ * Purpose: Prevent duplicate manual-download requests by checking whether a given episode URL
+ *   is already present anywhere in the download queue sheet.
+ * Operation: Reads all rows in the queue sheet, parses each JSON payload, and compares
+ *   `episodeUrl` against the target URL. Returns true on first match, false if not found.
+ * @param {string} episodeUrl - The episode audio URL to search for in the queue.
+ * @returns {boolean} - True if the URL exists in the queue, false otherwise.
+ */
+function isEpisodeInQueue(episodeUrl) {
+  const sheet = ensureDownloadQueueSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < values.length; i++) {
+    try {
+      const job = JSON.parse(String(values[i][0] || '').trim());
+      if (job && job.episodeUrl === episodeUrl) return true;
+    } catch (_) { /* skip malformed rows */ }
+  }
+  return false;
+}
+
+/**
  * Returns true if an audio file for this episode still exists in the podcast folder
  * (single file or first part of a chunked download).
  */
@@ -1134,9 +1156,19 @@ function fetchEpisodeList(rssUrl) {
   }
 }
 
-/** Manually downloads one episode from sidebar */
+/**
+ * Purpose: Handle a manual "Download to Drive" request from the sidebar.
+ * Operation: Instead of downloading inline (which would hit the 6-minute hard execution limit
+ *   for large files), this function enqueues the episode into the hidden download queue sheet
+ *   and immediately schedules `downloadWorker` to run. The worker handles the actual chunked
+ *   download with soft-stop and cross-run resume, exactly like automatic downloads.
+ *   Returns { success: true, queued: true } so the sidebar can show a "queued" state without
+ *   blocking the UI thread waiting for the download to finish.
+ * @param {Object} episodeData - { url, title, date, description, podcastTitle }
+ * @returns {{ success: boolean, queued?: boolean, alreadyQueued?: boolean,
+ *             alreadyDownloaded?: boolean, error?: string, driveFull?: boolean }}
+ */
 function downloadEpisode(episodeData) {
-  // episodeData: { url, title, date, description, podcastTitle }
   let runT0;
   try {
     if (!episodeData || !episodeData.url) {
@@ -1146,6 +1178,8 @@ function downloadEpisode(episodeData) {
     runT0 = Date.now();
     debugStep('downloadEpisode (sidebar): start', debugSnippet(episodeData.url, 150), runT0);
     const pubDate = episodeData.date ? new Date(episodeData.date) : new Date();
+
+    // Sync downloaded flag with Drive (manual-only: if file was deleted, allow re-download)
     syncDownloadedFlagWithDrive(
       episodeData.url,
       episodeData.podcastTitle || 'כללי',
@@ -1156,40 +1190,41 @@ function downloadEpisode(episodeData) {
     );
 
     if (isDownloaded(episodeData.url)) {
-      debugStep('downloadEpisode (sidebar): already in downloaded set', null, runT0);
+      debugStep('downloadEpisode (sidebar): already downloaded', null, runT0);
       return { success: false, alreadyDownloaded: true, error: 'הפרק כבר הורד בעבר' };
     }
 
-    const folder = getPodcastFolder(episodeData.podcastTitle || 'כללי');
-    const description = episodeData.description || '';
+    // Guard against double-tapping the button: check if the URL is already queued
+    if (isEpisodeInQueue(episodeData.url)) {
+      debugStep('downloadEpisode (sidebar): already in queue', null, runT0);
+      return { success: true, queued: true, alreadyQueued: true };
+    }
 
-    const results = downloadEpisodeToFolder(
-      episodeData.url,
-      episodeData.title || 'פרק',
-      pubDate,
-      folder,
-      description,
-      { runT0 }
+    // Enqueue the job with manualDownload=true so the worker logs it as "הורד ידנית"
+    enqueueDownloadJob({
+      podcastTitle: episodeData.podcastTitle || 'כללי',
+      episodeUrl:   episodeData.url,
+      episodeTitle: episodeData.title || 'פרק',
+      pubDate:      pubDate.toISOString(),
+      description:  episodeData.description || '',
+      manualDownload: true
+    });
+
+    // Fire the worker immediately (1 ms delay = as soon as possible)
+    scheduleDownloadWorkerAfterMs(1);
+
+    debugStep(
+      'downloadEpisode (sidebar): enqueued and worker scheduled',
+      debugSnippet(episodeData.url, 120),
+      runT0
     );
+    return { success: true, queued: true };
 
-    markDownloaded(episodeData.url);
-    const link = results.map(r => r.driveUrl).join('\n');
-    writeLog(episodeData.podcastTitle || '', episodeData.title || '', 'הורד ידנית', '', link);
-    debugStep('downloadEpisode (sidebar): success', 'files=' + results.length, runT0);
-
-    return { success: true, files: results };
   } catch (e) {
     debugStep('downloadEpisode (sidebar): catch', (e.message || String(e)).slice(0, 200), runT0);
     const isDriveFull = (e.message || '').toLowerCase().includes('storage');
-    const isRangeUnsupported = (e.message || '').includes('Range requests');
-    const isUrlFetchLimit = (e.message || '').includes('מגבלת UrlFetch');
-
     let userMessage = e.message;
     if (isDriveFull) userMessage = 'Drive מלא – הורדה נכשלה';
-    if (isRangeUnsupported || isUrlFetchLimit) {
-      userMessage = 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך בחלוקה לחלקים (Range)';
-    }
-
     writeLog(episodeData?.podcastTitle || '', episodeData?.title || '', 'שגיאה', userMessage);
     return { success: false, error: userMessage, driveFull: isDriveFull };
   }
@@ -1563,7 +1598,9 @@ function downloadWorker() {
     markDownloaded(job.episodeUrl, downloadedSet);
     saveDownloadedSet(downloadedSet);
     const link = results.map(r => r.driveUrl).join('\n');
-    writeLog(podcastTitle, job.episodeTitle || 'פרק', 'הורד אוטומטית', '', link);
+    // Respect the manualDownload flag set by downloadEpisode (sidebar) to log correctly
+    const logStatus = job.manualDownload ? 'הורד ידנית' : 'הורד אוטומטית';
+    writeLog(podcastTitle, job.episodeTitle || 'פרק', logStatus, '', link);
     shiftDownloadQueue();
     debugStep('downloadWorker: download OK', 'files=' + results.length, runT0);
   } catch (e) {
