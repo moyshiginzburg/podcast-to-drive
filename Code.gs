@@ -731,13 +731,16 @@ function createResumableUploadSession(fileName, mimeType, folderId, description)
  */
 function queryResumableSessionProgress(sessionUrl) {
   const token = getOAuthToken();
+  // NOTE: Google Apps Script does not allow setting the Content-Length header manually.
+  // To send a status-query request with zero bytes, we pass an empty Uint8Array as the payload.
+  // UrlFetchApp will compute Content-Length: 0 automatically.
   const resp = UrlFetchApp.fetch(sessionUrl, {
     method: 'put',
     headers: {
       Authorization: 'Bearer ' + token,
-      'Content-Range': '*/*',
-      'Content-Length': '0'
+      'Content-Range': '*/*'
     },
+    payload: new Uint8Array(0),
     muteHttpExceptions: true
   });
 
@@ -830,6 +833,10 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       debugStep('downloadResumable: session query failed, starting new session', e.message || String(e), runT0);
       sessionUrl = null;
       uploadedBytes = 0;
+      // CRITICAL: also clear the stale resumeOffset so the download loop starts from byte 0
+      // when a new session is created below (otherwise the old offset would produce a
+      // Content-Range mismatch → HTTP 503 from Drive).
+      if (options) options.resumeOffset = 0;
     }
   }
 

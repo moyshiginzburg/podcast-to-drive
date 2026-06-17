@@ -20,6 +20,9 @@ complete file** using the [Drive Resumable Upload API](https://developers.google
   URL and byte offset are saved to the queue job. When the worker runs again it calls
   `queryResumableSessionProgress()` to ask Drive how many bytes it already has, then resumes from
   that byte without creating duplicate files.
+- **Bug Fixes:**
+  - Fixed an issue in `queryResumableSessionProgress` where manually setting `'Content-Length': '0'` threw a Google Apps Script runtime error (`Header:Content-Length`). The query now sends an empty `Uint8Array` payload to query session progress.
+  - Fixed a state mismatch where a failed query (due to expired session or error) fell back to a new session but failed to reset the byte offset, causing `HTTP 503` mismatch errors. Now, falling back to a new session also clears the stale offset.
 - **Unknown content-length support:** For servers that omit `Content-Length`, intermediate chunks
   are uploaded with `Content-Range: bytes start-end/*` and the final chunk uses the actual total.
 
