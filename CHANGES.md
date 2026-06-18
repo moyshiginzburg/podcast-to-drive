@@ -1,5 +1,9 @@
 # Change log
 
+## 2026-06-18 – UrlFetch Bandwidth Limit Graceful Handling
+
+- **Bug Fix:** Fixed an issue where extremely fast podcast servers combined with the new efficient upload logic caused `UrlFetchApp` to exceed Google's internal upload bandwidth heuristics ("UrlFetch failed because of too much upload bandwidth used"). The error is now intercepted and treated as a soft stop (`TIME_BUDGET_EXCEEDED`), allowing the chunked upload to safely resume in the next worker run (after 1 minute) without failing the queue or artificially slowing down normal downloads.
+
 ## 2026-06-17 – Resumable Upload (Drive API) migration
 
 ### Overview

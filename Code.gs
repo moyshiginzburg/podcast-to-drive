@@ -1008,7 +1008,16 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
         muteHttpExceptions: true
       });
     } catch (e) {
-      throw new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${e.message}`);
+      const msg = e.message || String(e);
+      if (msg.includes('UrlFetch') && (msg.includes('רוחב פס') || msg.toLowerCase().includes('bandwidth'))) {
+        debugStep('downloadResumable: upload bandwidth limit hit (triggering soft stop)', `offset=${offset}`, runT0);
+        const err = new Error('TIME_BUDGET_EXCEEDED');
+        err.code = 'TIME_BUDGET_EXCEEDED';
+        err.resumeOffset = offset;
+        err.resumeSessionUrl = sessionUrl;
+        throw err;
+      }
+      throw new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${msg}`);
     }
     chunkPayload = null; // allow GC
 
