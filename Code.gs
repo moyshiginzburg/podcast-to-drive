@@ -1039,9 +1039,9 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
   }
 
   // --- 3. Chunk download + upload loop ---
-  let offset = (options && typeof options.resumeOffset === 'number' && options.resumeOffset >= 0)
-    ? options.resumeOffset
-    : uploadedBytes; // align download cursor with confirmed uploads
+  // Always trust Google Drive's reported progress as the absolute source of truth.
+  // This prevents mismatches and permanent failures if a hard timeout prevented the queue from updating.
+  let offset = uploadedBytes; // align download cursor with confirmed uploads
 
   let chunkIndex = 0;
   let fileId = null;
