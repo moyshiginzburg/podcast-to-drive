@@ -254,10 +254,43 @@ function syncActiveSubscriptionsMetadata(subs) {
   });
 }
 
+function getSetting(key, defaultValue) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('הגדרות');
+  if (!sheet) return defaultValue;
+  
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      return data[i][1] || defaultValue;
+    }
+  }
+  return defaultValue;
+}
+
+function saveSetting(key, value) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('הגדרות');
+  if (!sheet) {
+    sheet = ss.insertSheet('הגדרות');
+    sheet.appendRow(['הגדרה', 'ערך']);
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      sheet.getRange(i + 1, 2).setValue(value);
+      return;
+    }
+  }
+  sheet.appendRow([key, value]);
+}
+
 /** Returns object with { list: array, sortMode: string } */
 function getSubscriptionsList() {
-  const props = PropertiesService.getDocumentProperties();
-  const sortMode = props.getProperty('podcastSortMode') || 'default';
+  const sortMode = getSetting('podcastSortMode', 'default');
 
   const list = getSubscriptionRows()
     .filter(row => row.status === STATUS_ACTIVE)
@@ -272,7 +305,7 @@ function getSubscriptionsList() {
 }
 
 function savePodcastSortMode(mode) {
-  PropertiesService.getDocumentProperties().setProperty('podcastSortMode', String(mode));
+  saveSetting('podcastSortMode', String(mode));
 }
 
 /** Called from sidebar – add a new subscription */
