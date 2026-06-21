@@ -853,6 +853,38 @@ function queryResumableSessionProgress(sessionUrl) {
  * @param {Object}   [options]    - runT0, shouldStop(), resumeOffset, resumeSessionUrl.
  * @returns {Array<{fileId, fileName, driveUrl}>}
  */
+/**
+ * Purpose: Follows HTTP redirects manually while preserving custom headers (like Range).
+ *   UrlFetchApp's native followRedirects drops custom headers across domains.
+ * @returns {{ response: HTTPResponse, finalUrl: string }}
+ */
+function fetchWithRedirects(url, options, maxRedirects) {
+  let currentUrl = url;
+  let redirects = maxRedirects || 7;
+  const opts = Object.assign({}, options);
+  opts.followRedirects = false;
+  
+  while (redirects > 0) {
+    const resp = UrlFetchApp.fetch(currentUrl, opts);
+    const code = resp.getResponseCode();
+    if (code >= 300 && code < 400) {
+      const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
+      if (location) {
+        if (location.startsWith('/')) {
+          const match = currentUrl.match(/^https?:\/\/[^\/]+/);
+          currentUrl = (match ? match[0] : '') + location;
+        } else {
+          currentUrl = location;
+        }
+        redirects--;
+        continue;
+      }
+    }
+    return { response: resp, finalUrl: currentUrl };
+  }
+  throw new Error(`חריגה ממספר ההפניות (Too many redirects) עבור: ${url}`);
+}
+
 function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, description, options) {
   const runT0 = options && options.runT0;
   const shouldStop = (options && typeof options.shouldStop === 'function') ? options.shouldStop : () => false;
@@ -861,17 +893,20 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
   debugStep('downloadResumable: probe for extension/size', debugSnippet(episodeUrl, 120), runT0);
   let totalSize = null;
   let ext = 'mp3';
+  let directUrl = episodeUrl;
   try {
-    const probeResp = UrlFetchApp.fetch(episodeUrl, {
+    const probeResult = fetchWithRedirects(episodeUrl, {
       headers: { Range: 'bytes=0-0' },
-      followRedirects: true,
       muteHttpExceptions: true
     });
+    const probeResp = probeResult.response;
+    directUrl = probeResult.finalUrl;
+    
     const probeHeaders = probeResp.getHeaders() || {};
     const fromRange = parseTotalSizeFromContentRange(probeHeaders);
     const fromCl = parseContentLength(probeHeaders);
     totalSize = fromRange !== null ? fromRange : fromCl;
-    ext = detectFileExtension(episodeUrl, probeHeaders);
+    ext = detectFileExtension(directUrl, probeHeaders);
     debugStep('downloadResumable: probe done', `size=${totalSize} ext=${ext}`, runT0);
   } catch (e) {
     debugStep('downloadResumable: probe failed (continuing without size)', e.message || String(e), runT0);
@@ -952,11 +987,12 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
     // Download chunk from podcast server
     let downloadResp;
     try {
-      downloadResp = UrlFetchApp.fetch(episodeUrl, {
+      const chunkResult = fetchWithRedirects(directUrl, {
         headers: { Range: `bytes=${offset}-${rangeEnd}` },
-        followRedirects: true,
         muteHttpExceptions: true
       });
+      downloadResp = chunkResult.response;
+      directUrl = chunkResult.finalUrl;
     } catch (e) {
       throw new Error(`שגיאת רשת בהורדת chunk ${chunkIndex}: ${e.message}`);
     }

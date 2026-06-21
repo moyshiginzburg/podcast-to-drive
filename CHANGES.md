@@ -1,3 +1,7 @@
+## 2026-06-21 – Fix Resumable Upload HTTP 302 Redirect Bug
+- **Bug Fix:** Fixed an issue where `UrlFetchApp` would drop custom headers (like `Range`) when following cross-domain redirects natively (`followRedirects: true`), leading to HTTP 302/400 errors from podcast tracking servers.
+- **Performance:** Implemented a manual redirect follower (`fetchWithRedirects`) that preserves the `Range` header and caches the final resolved direct MP3 URL during the initial probe. This dramatically speeds up chunked downloads by bypassing tracking redirects for all subsequent chunks.
+
 ## 2026-06-21 – UX, OPML, and Terminology overhaul
 - Improved OPML import UX with a dedicated file upload button and automatic search for backups in Google Drive.
 - Implemented automatic background backup to OPML after subscription changes.
