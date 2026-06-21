@@ -254,9 +254,12 @@ function syncActiveSubscriptionsMetadata(subs) {
   });
 }
 
-/** Returns array of { url, title, imageUrl, subscribeDate } */
+/** Returns object with { list: array, sortMode: string } */
 function getSubscriptionsList() {
-  return getSubscriptionRows()
+  const props = PropertiesService.getDocumentProperties();
+  const sortMode = props.getProperty('podcastSortMode') || 'default';
+
+  const list = getSubscriptionRows()
     .filter(row => row.status === STATUS_ACTIVE)
     .map(row => ({
       url: row.url,
@@ -264,6 +267,12 @@ function getSubscriptionsList() {
       imageUrl: row.imageUrl || '',
       subscribeDate: row.subscribeDate || 0
     }));
+
+  return { list, sortMode };
+}
+
+function savePodcastSortMode(mode) {
+  PropertiesService.getDocumentProperties().setProperty('podcastSortMode', String(mode));
 }
 
 /** Called from sidebar – add a new subscription */

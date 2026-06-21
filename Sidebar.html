@@ -534,8 +534,13 @@ function loadPodcastList() {
   container.innerHTML = `<div class="empty-msg" style="grid-column:1 / -1;"><span class="spinner"></span><br>טוען...</div>`;
 
   google.script.run
-    .withSuccessHandler(list => {
-      subscriptions = list || [];
+    .withSuccessHandler(result => {
+      subscriptions = result.list || [];
+      podcastSortMode = result.sortMode || 'default';
+      
+      const sortSelect = document.getElementById('podcast-sort-select');
+      if (sortSelect) sortSelect.value = podcastSortMode;
+      
       renderPodcastList();
     })
     .withFailureHandler(err => {
@@ -544,7 +549,7 @@ function loadPodcastList() {
     .getSubscriptionsList();
 }
 
-let podcastSortMode = localStorage.getItem('podcastSortMode') || 'default';
+let podcastSortMode = 'default';
 
 function renderPodcastList() {
   const container = document.getElementById('podcasts-list');
@@ -1141,10 +1146,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const sortSelect = document.getElementById('podcast-sort-select');
   if (sortSelect) {
-    sortSelect.value = podcastSortMode;
     sortSelect.addEventListener('change', e => {
       podcastSortMode = e.target.value;
-      localStorage.setItem('podcastSortMode', podcastSortMode);
+      google.script.run.savePodcastSortMode(podcastSortMode);
       renderPodcastList();
     });
   }
