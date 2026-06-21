@@ -425,7 +425,7 @@
 <!-- ══ Header ══════════════════════════════════════════════ -->
 <div id="header">
   <span id="header-title">🎙 הסכתים</span>
-  <button class="hdr-btn" id="btn-search-toggle" title="חיפוש פודקאסטים">🔍</button>
+  <button class="hdr-btn" id="btn-search-toggle" title="חיפוש הסכתים">🔍</button>
   <button class="hdr-btn" id="btn-add-rss" title="הוסף מכתובת RSS">🔗</button>
   <button class="hdr-btn" id="btn-import-opml" title="ייבוא OPML">📥</button>
   <button class="hdr-btn" id="btn-export-opml" title="ייצוא OPML">📤</button>
@@ -433,7 +433,7 @@
 
 <!-- ══ Search bar ═══════════════════════════════════════════ -->
 <div id="search-bar">
-  <input type="text" id="search-input" placeholder="חפש פודקאסט...">
+  <input type="text" id="search-input" placeholder="חפש הסכת...">
   <button class="search-go-btn" id="btn-search-go">חפש</button>
 </div>
 <div id="status-strip">הורדה אוטומטית אחרונה: טרם בוצעה</div>
@@ -443,6 +443,12 @@
 
   <!-- Screen: Podcast list -->
   <div id="screen-podcasts" class="screen active">
+    <div style="display: flex; justify-content: flex-end; padding: 0px 10px 10px 10px;">
+      <select id="podcast-sort-select" style="font-size: 11px; padding: 3px 6px; border-radius: 4px; border: 1px solid #ccc; background: white; outline: none; cursor: pointer;">
+        <option value="default">מיין לפי סדר הוספה</option>
+        <option value="name">מיין לפי שם (א-ת)</option>
+      </select>
+    </div>
     <div id="podcasts-list"></div>
   </div>
 
@@ -471,8 +477,8 @@
 <!-- ══ RSS URL modal ═══════════════════════════════════════════ -->
 <div id="rss-modal">
   <div class="modal-box">
-    <div class="modal-title">🔗 הוספת פודקאסט מ-RSS</div>
-    <p style="font-size:12px;color:#555;margin-bottom:8px;">הזן כתובת מלאה של קובץ ה-RSS של הפודקאסט:</p>
+    <div class="modal-title">🔗 הוספת הסכת מ-RSS</div>
+    <p style="font-size:12px;color:#555;margin-bottom:8px;">הזן כתובת מלאה של קובץ ה-RSS של ההסכת:</p>
     <input type="text" class="modal-text-input" id="rss-url-input" dir="ltr" placeholder="https://example.com/podcast.xml">
     <div class="modal-actions">
       <button class="modal-cancel" id="rss-cancel">ביטול</button>
@@ -485,8 +491,18 @@
 <div id="opml-modal">
   <div class="modal-box">
     <div class="modal-title">📥 ייבוא OPML</div>
-    <p style="font-size:12px;color:#555;margin-bottom:8px;">הדבק את תוכן קובץ ה-OPML כאן:</p>
-    <textarea class="modal-textarea" id="opml-text" placeholder='<?xml version="1.0"?> ...'></textarea>
+    
+    <div id="opml-drive-section" style="margin-bottom: 15px; padding: 10px; background: #e8f0fe; border-radius: 6px;">
+       <div id="opml-drive-status"><span class="spinner"></span> בודק גיבוי ב-Drive...</div>
+       <div id="opml-drive-result" style="display:none; font-size:12px; color:#1558b0;">
+          <p id="opml-drive-info" style="margin-bottom:8px;"></p>
+          <button id="btn-import-drive" class="btn-primary" style="padding: 4px 10px; font-size:11px;">ייבא מגיבוי זה</button>
+       </div>
+    </div>
+
+    <p style="font-size:12px;color:#555;margin-bottom:8px;">או בחר קובץ מתוך המחשב:</p>
+    <input type="file" id="opml-file-input" accept=".opml,.xml" style="width:100%; font-size:12px; margin-bottom:10px;">
+
     <div class="modal-actions">
       <button class="modal-cancel" id="opml-cancel">ביטול</button>
       <button class="modal-confirm" id="opml-confirm">ייבא</button>
@@ -528,6 +544,8 @@ function loadPodcastList() {
     .getSubscriptionsList();
 }
 
+let podcastSortMode = 'default';
+
 function renderPodcastList() {
   const container = document.getElementById('podcasts-list');
   if (subscriptions.length === 0) {
@@ -538,7 +556,13 @@ function renderPodcastList() {
   }
 
   container.innerHTML = '';
-  subscriptions.forEach(pod => {
+
+  let listToRender = [...subscriptions];
+  if (podcastSortMode === 'name') {
+    listToRender.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'he'));
+  }
+
+  listToRender.forEach(pod => {
     const item = document.createElement('div');
     item.className = 'podcast-item';
     const safeId = pod.url.replace(/[^a-zA-Z0-9]/g, '');
@@ -603,7 +627,7 @@ function togglePodcastDesc(btn, url) {
         }
         let html = res.description ? escHtml(res.description).replace(/\n/g, '<br>') : '';
         if (res.link) {
-          html += (html ? '<br><br>' : '') + `<a href="${escHtml(res.link)}" target="_blank">🔗 לאתר הפודקאסט</a>`;
+          html += (html ? '<br><br>' : '') + `<a href="${escHtml(res.link)}" target="_blank">🔗 לאתר ההסכת</a>`;
         }
         content.innerHTML = html || 'אין תיאור זמין.';
       })
@@ -854,8 +878,34 @@ function renderSearchResults(results) {
 // OPML IMPORT
 // ══════════════════════════════════════════════════════════════
 function openImportModal() {
-  document.getElementById('opml-text').value = '';
+  document.getElementById('opml-file-input').value = '';
   document.getElementById('opml-modal').classList.add('visible');
+  
+  document.getElementById('opml-drive-status').style.display = 'block';
+  document.getElementById('opml-drive-result').style.display = 'none';
+  document.getElementById('opml-drive-info').innerHTML = '';
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      document.getElementById('opml-drive-status').style.display = 'none';
+      if (res.success && res.found) {
+        document.getElementById('opml-drive-info').innerHTML = `נמצא גיבוי בדרייב: <b>${escHtml(res.name)}</b><br><span style="color:#888;">מתאריך: ${formatDisplayDate(res.date)}</span>`;
+        document.getElementById('btn-import-drive').dataset.fileid = res.id;
+        document.getElementById('opml-drive-result').style.display = 'block';
+        document.getElementById('btn-import-drive').style.display = 'inline-block';
+      } else {
+        document.getElementById('opml-drive-info').innerHTML = 'לא נמצאו גיבויים קודמים בתיקיית הסכתים.';
+        document.getElementById('opml-drive-result').style.display = 'block';
+        document.getElementById('btn-import-drive').style.display = 'none';
+      }
+    })
+    .withFailureHandler(err => {
+      document.getElementById('opml-drive-status').style.display = 'none';
+      document.getElementById('opml-drive-info').innerHTML = 'שגיאה בחיפוש גיבויים בדרייב.';
+      document.getElementById('opml-drive-result').style.display = 'block';
+      document.getElementById('btn-import-drive').style.display = 'none';
+    })
+    .findLatestOPMLInDrive();
 }
 
 function closeImportModal() {
@@ -889,7 +939,7 @@ function doAddRss() {
       if (result.success) {
         closeRssModal();
         loadPodcastList();
-        showBanner('✓ הפודקאסט נוסף למנויים', 'success');
+        showBanner('✓ ההסכת נוסף למנויים', 'success');
       } else {
         alert(result.error || 'שגיאה');
       }
@@ -903,20 +953,61 @@ function doAddRss() {
 }
 
 function doImport() {
-  const text = document.getElementById('opml-text').value.trim();
-  if (!text) { alert('יש להדביק תוכן OPML.'); return; }
+  const fileInput = document.getElementById('opml-file-input');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert('יש לבחור קובץ OPML מהמחשב.');
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  const reader = new FileReader();
 
   const btn = document.getElementById('opml-confirm');
   btn.disabled = true;
   btn.textContent = '...';
 
+  reader.onload = function(e) {
+    const text = e.target.result;
+    showBanner('<span class="spinner"></span> מייבא הסכתים ומושך תמונות (עשוי לקחת קצת זמן)...', 'info', false);
+    google.script.run
+      .withSuccessHandler(result => {
+        btn.disabled = false;
+        btn.textContent = 'ייבא';
+        closeImportModal();
+        if (result.success) {
+          showBanner(`✓ יובאו ${result.added} הסכתים, דולגו ${result.skipped} כפילויות.`, 'success');
+          loadPodcastList();
+        } else {
+          showBanner('שגיאה: ' + result.error, 'error');
+        }
+      })
+      .withFailureHandler(err => {
+        btn.disabled = false;
+        btn.textContent = 'ייבא';
+        closeImportModal();
+        showBanner('שגיאה: ' + err.message, 'error');
+      })
+      .importOPML(text);
+  };
+  reader.readAsText(file);
+}
+
+function doImportFromDrive() {
+  const btn = document.getElementById('btn-import-drive');
+  const fileId = btn.dataset.fileid;
+  if (!fileId) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  showBanner('<span class="spinner"></span> מייבא הסכתים ומושך תמונות (עשוי לקחת קצת זמן)...', 'info', false);
+
   google.script.run
     .withSuccessHandler(result => {
       btn.disabled = false;
-      btn.textContent = 'ייבא';
+      btn.textContent = 'ייבא מגיבוי זה';
       closeImportModal();
       if (result.success) {
-        showBanner(`✓ יובאו ${result.added} פודקאסטים, דולגו ${result.skipped} כפילויות.`, 'success');
+        showBanner(`✓ יובאו ${result.added} הסכתים, דולגו ${result.skipped} כפילויות.`, 'success');
         loadPodcastList();
       } else {
         showBanner('שגיאה: ' + result.error, 'error');
@@ -924,11 +1015,11 @@ function doImport() {
     })
     .withFailureHandler(err => {
       btn.disabled = false;
-      btn.textContent = 'ייבא';
+      btn.textContent = 'ייבא מגיבוי זה';
       closeImportModal();
       showBanner('שגיאה: ' + err.message, 'error');
     })
-    .importOPML(text);
+    .importOPMLFromDrive(fileId);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -940,7 +1031,7 @@ function doExport() {
     .withSuccessHandler(result => {
       if (result.success) {
         showBanner(
-          `✓ OPML נשמר: <a href="${result.driveUrl}" target="_blank">${escHtml(result.fileName)}</a>`,
+          `✓ גיבוי נשמר בתיקיית <b>הסכתים</b> בדרייב:<br><a href="${result.driveUrl}" target="_blank" style="text-decoration:underline;">${escHtml(result.fileName)}</a>`,
           'success'
         );
       } else {
@@ -1044,6 +1135,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('opml-confirm').addEventListener('click', doImport);
   document.getElementById('opml-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('opml-modal')) closeImportModal();
+  });
+  
+  document.getElementById('btn-import-drive').addEventListener('click', doImportFromDrive);
+
+  document.getElementById('podcast-sort-select').addEventListener('change', e => {
+    podcastSortMode = e.target.value;
+    renderPodcastList();
   });
 
   // Initial load

@@ -276,7 +276,7 @@ function addSubscription(rssUrl, title, imageUrl) {
   const existing = rows.find(row => row.url === url);
 
   if (existing && existing.status === STATUS_ACTIVE) {
-    return { success: false, message: 'כבר מנוי לפודקאסט זה' };
+    return { success: false, message: 'כבר מנוי להסכת זה' };
   }
 
   const values = [
@@ -293,6 +293,7 @@ function addSubscription(rssUrl, title, imageUrl) {
     sheet.appendRow(values);
   }
 
+  scheduleAutoOpmlBackup();
   return { success: true };
 }
 
@@ -333,6 +334,7 @@ function removeSubscription(rssUrl) {
   const row = rows.find(r => r.url === url && r.status === STATUS_ACTIVE);
   if (row) {
     sheet.getRange(row.rowIndex, 5).setValue(STATUS_CANCELLED);
+    scheduleAutoOpmlBackup();
   }
   return { success: true };
 }
@@ -579,7 +581,7 @@ function writeLog(podcastTitle, episodeTitle, status, note, link) {
   let sheet = ss.getSheetByName(LOG_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(LOG_SHEET_NAME);
-    sheet.appendRow(['תאריך', 'פודקאסט', 'פרק', 'סטטוס', 'הערה', 'קישור']);
+    sheet.appendRow(['תאריך', 'הסכת', 'פרק', 'סטטוס', 'הערה', 'קישור']);
     sheet.setFrozenRows(1);
   } else if (sheet.getLastColumn() < 6) {
     sheet.getRange(1, 6).setValue('קישור');
@@ -1340,10 +1342,44 @@ function importOPML(opmlText) {
       return { success: false, error: 'לא נמצאו feeds בקובץ ה-OPML' };
     }
 
+function getMetadataFast(url) {
+  try {
+    const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (resp.getResponseCode() >= 400) return { title: '', imageUrl: '' };
+    const text = resp.getContentText().substring(0, 100000);
+    let title = '';
+    let imageUrl = '';
+    const channelMatch = text.match(/<channel[\s\S]*?(?=<item>|<\/channel>)/i);
+    if (channelMatch) {
+      const channelText = channelMatch[0];
+      const titleMatch = channelText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (titleMatch) {
+        title = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
+      }
+      const itunesImgMatch = channelText.match(/<itunes:image[^>]+href=["']([^"']+)["']/i);
+      if (itunesImgMatch) {
+        imageUrl = itunesImgMatch[1];
+      } else {
+        const imgMatch = channelText.match(/<image>[\s\S]*?<url>([\s\S]*?)<\/url>[\s\S]*?<\/image>/i);
+        if (imgMatch) {
+          imageUrl = imgMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
+        }
+      }
+    }
+    return { title, imageUrl };
+  } catch (e) {
+    return { title: '', imageUrl: '' };
+  }
+}
+
     let added = 0, skipped = 0;
 
     feeds.forEach(feed => {
-      const result = addSubscription(feed.url, feed.title || feed.url, '');
+      const meta = getMetadataFast(feed.url);
+      const finalTitle = meta.title || feed.title || feed.url;
+      const finalImage = meta.imageUrl || '';
+      
+      const result = addSubscription(feed.url, finalTitle, finalImage);
       if (result.success) {
         added++;
       } else {
@@ -1372,6 +1408,104 @@ function collectFeedsFromOutlines(parentEl, feeds) {
     // Recurse into category outlines
     collectFeedsFromOutlines(outline, feeds);
   });
+}
+
+// ============================================================
+// OPML IMPORT FROM DRIVE & AUTO BACKUP
+// ============================================================
+
+function findLatestOPMLInDrive() {
+  try {
+    const root = getRootFolder();
+    const it = root.searchFiles('trashed = false and title contains ".opml"');
+    let latestFile = null;
+    let latestTime = 0;
+    while (it.hasNext()) {
+      const file = it.next();
+      const time = file.getLastUpdated().getTime();
+      if (time > latestTime) {
+        latestTime = time;
+        latestFile = file;
+      }
+    }
+    if (latestFile) {
+      return { 
+        success: true, 
+        found: true, 
+        id: latestFile.getId(), 
+        name: latestFile.getName(), 
+        date: latestFile.getLastUpdated().toISOString() 
+      };
+    }
+    return { success: true, found: false };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function importOPMLFromDrive(fileId) {
+  try {
+    const file = DriveApp.getFileById(fileId);
+    // basic security: make sure it's in the podcast root folder
+    const parents = file.getParents();
+    let inRoot = false;
+    const rootId = getRootFolder().getId();
+    while (parents.hasNext()) {
+      if (parents.next().getId() === rootId) {
+        inRoot = true;
+        break;
+      }
+    }
+    if (!inRoot) {
+      return { success: false, error: 'הקובץ לא נמצא בתיקיית הסכתים.' };
+    }
+    const content = file.getBlob().getDataAsString();
+    return importOPML(content);
+  } catch (e) {
+    return { success: false, error: 'שגיאה בקריאת הקובץ מהדרייב: ' + e.message };
+  }
+}
+
+const PROP_AUTO_OPML_TRIG = 'autoOpmlTrigId';
+
+function scheduleAutoOpmlBackup() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty(PROP_AUTO_OPML_TRIG);
+  if (id) {
+    ScriptApp.getProjectTriggers()
+      .filter(t => t.getUniqueId() === id)
+      .forEach(t => ScriptApp.deleteTrigger(t));
+  }
+  const trig = ScriptApp.newTrigger('autoExportOPML').timeBased().after(2 * 60 * 1000).create();
+  props.setProperty(PROP_AUTO_OPML_TRIG, trig.getUniqueId());
+}
+
+function autoExportOPML() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty(PROP_AUTO_OPML_TRIG);
+  if (id) {
+    ScriptApp.getProjectTriggers()
+      .filter(t => t.getUniqueId() === id)
+      .forEach(t => ScriptApp.deleteTrigger(t));
+    props.deleteProperty(PROP_AUTO_OPML_TRIG);
+  }
+  
+  exportOPML();
+  cleanupOldOPMLs();
+}
+
+function cleanupOldOPMLs() {
+  const root = getRootFolder();
+  const it = root.searchFiles('trashed = false and title contains ".opml"');
+  const files = [];
+  while (it.hasNext()) {
+    files.push(it.next());
+  }
+  files.sort((a, b) => b.getLastUpdated().getTime() - a.getLastUpdated().getTime());
+  
+  for (let i = 2; i < files.length; i++) {
+    files[i].setTrashed(true);
+  }
 }
 
 // ============================================================
