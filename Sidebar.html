@@ -544,7 +544,7 @@ function loadPodcastList() {
     .getSubscriptionsList();
 }
 
-let podcastSortMode = 'default';
+let podcastSortMode = localStorage.getItem('podcastSortMode') || 'default';
 
 function renderPodcastList() {
   const container = document.getElementById('podcasts-list');
@@ -1139,10 +1139,15 @@ document.addEventListener('DOMContentLoaded', () => {
   
   document.getElementById('btn-import-drive').addEventListener('click', doImportFromDrive);
 
-  document.getElementById('podcast-sort-select').addEventListener('change', e => {
-    podcastSortMode = e.target.value;
-    renderPodcastList();
-  });
+  const sortSelect = document.getElementById('podcast-sort-select');
+  if (sortSelect) {
+    sortSelect.value = podcastSortMode;
+    sortSelect.addEventListener('change', e => {
+      podcastSortMode = e.target.value;
+      localStorage.setItem('podcastSortMode', podcastSortMode);
+      renderPodcastList();
+    });
+  }
 
   // Initial load
   loadLastAutoRunLabel();
