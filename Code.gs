@@ -1330,6 +1330,7 @@ function searchPodcasts(query) {
 
 function importOPML(opmlText) {
   try {
+    console.log('importOPML: מתחיל בניתוח טקסט ה-OPML');
     const doc = XmlService.parse(sanitizeXmlForParsing(opmlText));
     const root = doc.getRootElement();
     const body = root.getChild('body');
@@ -1339,8 +1340,11 @@ function importOPML(opmlText) {
     collectFeedsFromOutlines(body, feeds);
 
     if (feeds.length === 0) {
+      console.warn('importOPML: לא נמצאו הסכתים בקובץ ה-OPML');
       return { success: false, error: 'לא נמצאו feeds בקובץ ה-OPML' };
     }
+
+    console.log(`importOPML: נמצאו ${feeds.length} הסכתים בקובץ. מתחיל ייבוא...`);
 
 function getMetadataFast(url) {
   try {
@@ -1374,7 +1378,8 @@ function getMetadataFast(url) {
 
     let added = 0, skipped = 0;
 
-    feeds.forEach(feed => {
+    feeds.forEach((feed, index) => {
+      console.log(`importOPML: מעבד הסכת ${index + 1} מתוך ${feeds.length} - ${feed.url}`);
       const meta = getMetadataFast(feed.url);
       const finalTitle = meta.title || feed.title || feed.url;
       const finalImage = meta.imageUrl || '';
@@ -1387,8 +1392,10 @@ function getMetadataFast(url) {
       }
     });
 
+    console.log(`importOPML: הייבוא הושלם. נוספו: ${added}, דולגו: ${skipped}.`);
     return { success: true, added, skipped };
   } catch (e) {
+    console.error(`importOPML: שגיאה בניתוח OPML: ${e.message}`, e.stack);
     return { success: false, error: `שגיאה בניתוח OPML: ${e.message}` };
   }
 }
@@ -1514,14 +1521,18 @@ function cleanupOldOPMLs() {
 
 function exportOPML() {
   try {
+    console.log('exportOPML: מתחיל ייצוא OPML לגיבוי');
     const subs = getSubscriptions();
     const entries = Object.entries(subs);
     if (entries.length === 0) {
+      console.warn('exportOPML: אין מנויים לייצוא');
       return { success: false, error: 'אין מנויים לייצוא' };
     }
 
     const dateStr = formatDateYYMMDD(new Date());
     const escAttr = s => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    console.log(`exportOPML: מייצר קובץ XML עבור ${entries.length} הסכתים...`);
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
     xml += `<opml version="2.0">\n`;
@@ -1541,8 +1552,12 @@ function exportOPML() {
 
     const folder = getRootFolder();
     const fileName = `subscriptions_${dateStr}.opml`;
+    
+    console.log(`exportOPML: שומר את הקובץ ${fileName} לתיקיית ההסכתים בדרייב...`);
     const blob = Utilities.newBlob(xml, 'text/x-opml; charset=UTF-8', fileName);
     const file = folder.createFile(blob);
+
+    console.log(`exportOPML: הקובץ נשמר בהצלחה! מזהה קובץ: ${file.getId()}`);
 
     return {
       success: true,
