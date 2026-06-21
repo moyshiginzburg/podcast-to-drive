@@ -341,6 +341,89 @@ function addSubscription(rssUrl, title, imageUrl) {
 }
 
 /**
+ * Purpose: Adds multiple podcast subscriptions efficiently to the database sheet in a single bulk operation.
+ * Operation: Receives an array of podcast objects, filters out existing active ones, updates
+ *   cancelled ones in-place if possible, and appends all new ones in one Google Sheets API call
+ *   (`setValues`). Schedules the OPML backup only once at the very end to avoid trigger quotas.
+ */
+function addMultipleSubscriptions(podcasts) {
+  const sheet = getSubscriptionsSheet();
+  const rows = getSubscriptionRows();
+  let addedCount = 0;
+  let skippedCount = 0;
+  const newRows = [];
+  const now = new Date();
+
+  podcasts.forEach(p => {
+    const url = String(p.url || '').trim();
+    if (!url) return;
+
+    const existing = rows.find(row => row.url === url);
+    if (existing && existing.status === STATUS_ACTIVE) {
+      skippedCount++;
+      return;
+    }
+
+    const values = [
+      url,
+      p.title || url,
+      p.imageUrl || '',
+      now,
+      STATUS_ACTIVE
+    ];
+
+    if (existing) {
+      sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([values]);
+      addedCount++;
+    } else {
+      newRows.push(values);
+      addedCount++;
+    }
+  });
+
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 5).setValues(newRows);
+  }
+
+  if (addedCount > 0) {
+    scheduleAutoOpmlBackup();
+  }
+
+  return { added: addedCount, skipped: skippedCount };
+}
+
+/**
+ * Purpose: Extracts the podcast title and image URL from the raw XML content of an RSS feed.
+ * Operation: Uses Regex to find the <channel> block, then searches for <title> and <itunes:image> or <image><url> tags.
+ *   Returns an object with title and imageUrl strings (empty strings if not found).
+ */
+function parseXmlForMetadata(xmlText) {
+  let title = '';
+  let imageUrl = '';
+  if (!xmlText) return { title, imageUrl };
+  
+  const text = String(xmlText).substring(0, 100000);
+  const channelMatch = text.match(/<channel[\s\S]*?(?=<item>|<\/channel>)/i);
+  if (channelMatch) {
+    const channelText = channelMatch[0];
+    const titleMatch = channelText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (titleMatch) {
+      title = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
+    }
+    const itunesImgMatch = channelText.match(/<itunes:image[^>]+href=["']([^"']+)["']/i);
+    if (itunesImgMatch) {
+      imageUrl = itunesImgMatch[1];
+    } else {
+      const imgMatch = channelText.match(/<image>[\s\S]*?<url>([\s\S]*?)<\/url>[\s\S]*?<\/image>/i);
+      if (imgMatch) {
+        imageUrl = imgMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
+      }
+    }
+  }
+  return { title, imageUrl };
+}
+
+/**
  * Purpose: Let the user subscribe by pasting a podcast RSS feed URL from the sidebar.
  * Operation: Normalizes the URL (HTTPS by default), fetches and parses the feed with
  * `parseRSS` to verify it and read channel title and artwork, then saves via `addSubscription`.
@@ -1425,51 +1508,59 @@ function importOPML(opmlText) {
 
     console.log(`importOPML: נמצאו ${feeds.length} הסכתים בקובץ. מתחיל ייבוא...`);
 
-function getMetadataFast(url) {
-  try {
-    const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (resp.getResponseCode() >= 400) return { title: '', imageUrl: '' };
-    const text = resp.getContentText().substring(0, 100000);
-    let title = '';
-    let imageUrl = '';
-    const channelMatch = text.match(/<channel[\s\S]*?(?=<item>|<\/channel>)/i);
-    if (channelMatch) {
-      const channelText = channelMatch[0];
-      const titleMatch = channelText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-      if (titleMatch) {
-        title = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
-      }
-      const itunesImgMatch = channelText.match(/<itunes:image[^>]+href=["']([^"']+)["']/i);
-      if (itunesImgMatch) {
-        imageUrl = itunesImgMatch[1];
-      } else {
-        const imgMatch = channelText.match(/<image>[\s\S]*?<url>([\s\S]*?)<\/url>[\s\S]*?<\/image>/i);
-        if (imgMatch) {
-          imageUrl = imgMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/is, "$1").trim();
-        }
-      }
-    }
-    return { title, imageUrl };
-  } catch (e) {
-    return { title: '', imageUrl: '' };
-  }
-}
+    const BATCH_SIZE = 50;
+    const finalSubscriptions = [];
 
-    let added = 0, skipped = 0;
-
-    feeds.forEach((feed, index) => {
-      console.log(`importOPML: מעבד הסכת ${index + 1} מתוך ${feeds.length} - ${feed.url}`);
-      const meta = getMetadataFast(feed.url);
-      const finalTitle = meta.title || feed.title || feed.url;
-      const finalImage = meta.imageUrl || '';
+    for (let i = 0; i < feeds.length; i += BATCH_SIZE) {
+      const batch = feeds.slice(i, i + BATCH_SIZE);
+      console.log(`importOPML: מעבד מקבץ ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} הסכתים)...`);
       
-      const result = addSubscription(feed.url, finalTitle, finalImage);
-      if (result.success) {
-        added++;
-      } else {
-        skipped++;
+      // Pre-filter bad URLs to prevent them from crashing the entire fetchAll batch
+      const requests = batch.map(feed => {
+        if (!/^https?:\/\//i.test(feed.url)) {
+          return { url: 'https://google.com', muteHttpExceptions: true }; // dummy valid URL
+        }
+        return { url: feed.url, muteHttpExceptions: true };
+      });
+
+      let responses = [];
+      try {
+        responses = UrlFetchApp.fetchAll(requests);
+      } catch (e) {
+        console.warn(`importOPML: שגיאה בשליפת מקבץ במקביל, מנסה באופן טורי... ${e.message}`);
+        // Fallback: If fetchAll fails (e.g. DNS error on one of the URLs), fetch sequentially
+        responses = batch.map(feed => {
+          try {
+            if (!/^https?:\/\//i.test(feed.url)) return null;
+            return UrlFetchApp.fetch(feed.url, { muteHttpExceptions: true });
+          } catch (err) {
+            return null; // Ignore individual DNS/timeout errors
+          }
+        });
       }
-    });
+
+      batch.forEach((feed, index) => {
+        const resp = responses[index];
+        let xmlText = '';
+        if (resp && typeof resp.getResponseCode === 'function' && resp.getResponseCode() < 400) {
+          xmlText = resp.getContentText();
+        }
+        
+        const meta = parseXmlForMetadata(xmlText);
+        const finalTitle = meta.title || feed.title || feed.url;
+        const finalImage = meta.imageUrl || '';
+        
+        finalSubscriptions.push({
+          url: feed.url,
+          title: finalTitle,
+          imageUrl: finalImage
+        });
+      });
+    }
+
+    const result = addMultipleSubscriptions(finalSubscriptions);
+    const added = result.added || 0;
+    const skipped = result.skipped || 0;
 
     console.log(`importOPML: הייבוא הושלם. נוספו: ${added}, דולגו: ${skipped}.`);
     return { success: true, added, skipped };
@@ -1748,9 +1839,12 @@ function podcastManager() {
     let episodes = [];
     try {
       const parsed = parseRSS(rssUrl, runT0, subData.subscribeDate || 0);
-      // Update cached title if podcast renamed itself
+      // Update cached title and image if podcast renamed itself or missing artwork
       if (parsed.title && parsed.title !== subData.title) {
         subs[rssUrl].title = parsed.title;
+      }
+      if (parsed.imageUrl && parsed.imageUrl !== subData.imageUrl) {
+        subs[rssUrl].imageUrl = parsed.imageUrl;
       }
       episodes = parsed.episodes;
       debugStep('podcastManager: episodes after date filter', 'count=' + episodes.length, runT0);

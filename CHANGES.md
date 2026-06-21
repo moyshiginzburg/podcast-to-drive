@@ -1,3 +1,7 @@
+## 2026-06-21 – OPML Bulk Import Optimization
+- **Performance & Quota Fix:** Overhauled the OPML import process to use `UrlFetchApp.fetchAll` for parallel metadata fetching (in batches of 50) and bulk Google Sheets API writes (`setValues`). This reduces the import time of hundreds of podcasts from over 15 minutes to just a few seconds, completely eliminating Google Apps Script's 6-minute execution limit crashes and `ScriptApp` trigger quotas ("Service invoked too many times").
+- **Self-Healing:** In cases where RSS metadata fetching fails during OPML import due to timeouts, podcasts are imported gracefully without artwork, allowing the standard `podcastManager` background worker to automatically fetch and update missing titles and images during its normal 6-hour cycle.
+
 ## 2026-06-21 – Fix Resumable Upload HTTP 302 Redirect Bug
 - **Bug Fix:** Fixed an issue where `UrlFetchApp` would drop custom headers (like `Range`) when following cross-domain redirects natively (`followRedirects: true`), leading to HTTP 302/400 errors from podcast tracking servers.
 - **Performance:** Implemented a manual redirect follower (`fetchWithRedirects`) that preserves the `Range` header and caches the final resolved direct MP3 URL during the initial probe. This dramatically speeds up chunked downloads by bypassing tracking redirects for all subsequent chunks.
