@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-06-17
+ * Version: 2026-06-21
  * License: AGPL-3.0
  */
 

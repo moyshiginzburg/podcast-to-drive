@@ -1,3 +1,12 @@
+## 2026-06-21 – UX, OPML, and Terminology overhaul
+- Improved OPML import UX with a dedicated file upload button and automatic search for backups in Google Drive.
+- Implemented automatic background backup to OPML after subscription changes.
+- Automatically limit OPML backups to the 2 most recent files.
+- Fetch podcast metadata (image & title) rapidly during OPML import to prevent missing UI artwork.
+- Added sorting preference for podcasts (Date added vs Alphabetical), saved inside the Google Sheet settings.
+- Standardized Hebrew terminology across the project to use 'הסכת' (hesket) instead of 'פודקאסט'.
+- Ensured auto-generated sheets like 'Settings' and 'Download Queue' remain visible in the Google Sheets document.
+
 # Change log
 
 ## 2026-06-18 – UrlFetch Bandwidth Limit Graceful Handling
