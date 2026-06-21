@@ -275,7 +275,8 @@ function saveSetting(key, value) {
     sheet = ss.insertSheet('הגדרות');
     sheet.appendRow(['הגדרה', 'ערך']);
     sheet.setFrozenRows(1);
-    sheet.hideSheet();
+  } else if (sheet.isSheetHidden()) {
+    sheet.showSheet();
   }
   
   const data = sheet.getDataRange().getValues();
@@ -458,8 +459,8 @@ function unmarkDownloaded(url, set) {
 
 function ensureDownloadQueueSheet() {
   const sheet = ensureSheetWithHeaders(DOWNLOAD_QUEUE_SHEET_NAME, DOWNLOAD_QUEUE_HEADERS);
-  if (!sheet.isSheetHidden()) {
-    sheet.hideSheet();
+  if (sheet.isSheetHidden()) {
+    sheet.showSheet();
   }
   return sheet;
 }
