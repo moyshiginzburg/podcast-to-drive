@@ -13,8 +13,8 @@
 - **Direct to Drive:** Downloads MP3 files straight to a dedicated `הסכתים` folder in your Google Drive.
 - **Privacy First:** Your data never leaves your Google account. No external servers, no tracking, no sign-ups.
 - **Smart Background Worker:** Automatically checks for new episodes every 6 hours. Background downloads are queued and processed asynchronously, bypassing execution time limits and memory constraints.
-- **Large File Support:** Seamlessly handles large podcast episodes using chunked downloads (`Range` requests) and mitigates Apps Script memory limitations.
-- **Simple UI:** Manage subscriptions (via iTunes search, RSS, or OPML) through a clean, Hebrew-localized Sidebar inside Google Sheets.
+- **Large File Support:** Seamlessly handles large podcast episodes using the Drive Resumable Upload API, storing them as single, complete files while mitigating Apps Script memory limitations.
+- **Simple UI:** Manage subscriptions (via iTunes search, RSS, or OPML) through a clean, Hebrew-localized Sidebar inside Google Sheets, with automatic OPML backups and custom sorting preferences.
 - **Detailed Logging:** Keeps a rich-text log of all downloaded episodes and their direct Drive links.
 
 ---
@@ -26,8 +26,8 @@ The system operates within a Google Sheet that acts as your database and control
 2. **Download Engine (`Code.gs`):** 
    - A time-based trigger runs `podcastManager` every 6 hours.
    - It parses your active RSS feeds and identifies episodes published after your subscription date.
-   - Pending episodes are pushed to a hidden queue (`תור הורדות`).
-   - A separate background worker (`downloadWorker`) processes this queue one by one, downloading files directly or in chunks if they are large, ensuring the script never times out.
+   - Pending episodes (and manual downloads triggered via the UI) are pushed to a queue (`תור הורדות`).
+   - A separate background worker (`downloadWorker`) processes this queue one by one, ensuring the script never times out even for the largest files.
 3. **Storage (`הסכתים` folder):** Audio files are saved in `Google Drive/הסכתים/<Podcast Name>/`.
 4. **Tracking (`הורדות` & `Log`):** Successfully downloaded episode URLs are saved in the `הורדות` sheet to prevent duplicates. A detailed record with clickable links is written to the `Log` sheet.
 
@@ -72,8 +72,10 @@ If you want to deploy the code yourself or contribute:
 | Sheet **`מנויים`** | Subscriptions: `כתובת RSS`, `שם`, `תמונה`, `תאריך הרשמה`, `סטטוס` (`פעיל` / `בוטל`) |
 | Sheet **`הורדות`** | Downloaded episode URLs (`כתובת`) |
 | Sheet **`Log`** | Columns: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` |
-| Sheet **`תור הורדות`** | *(Hidden)* Internal queue for the background downloader |
+| Sheet **`תור הורדות`** | Internal queue for the background downloader |
+| Sheet **`Settings`** | User preferences, like podcast sorting order |
 | Script **Properties** | `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| Drive **OPML Backups** | The 2 most recent OPML backups of your subscriptions |
 | Drive **`הסכתים/`** | Root folder for audio files |
 | Drive **`הסכתים/<podcast name>/`** | MP3 files per podcast |
 
@@ -99,8 +101,8 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 - **ישירות לדרייב:** הורדת קבצי MP3 ישירות לתיקיית `הסכתים` ב-Google Drive שלכם.
 - **פרטיות מעל הכל:** המידע שלכם נשאר רק אצלכם. המערכת פועלת מתוך חשבון הגוגל שלכם, ללא שרתים חיצוניים או הרשמות.
 - **טייס אוטומטי חכם:** בדיקה אוטומטית של פרקים חדשים כל 6 שעות. המערכת מנהלת תור הורדות ברקע כדי לעקוף את מגבלות זמן הריצה והזיכרון של גוגל.
-- **תמיכה בקבצים גדולים:** טיפול חכם בפרקים ארוכים באמצעות הורדה בחלקים (`Chunked Downloads`), מה שמונע קריסות (שגיאות זיכרון) ומבטיח הורדה חלקה של כל פרק.
-- **ממשק משתמש פשוט:** ניהול מנויים (דרך חיפוש ב-iTunes, הזנת כתובת RSS, או ייבוא OPML) דרך חלונית צד נקייה וידידותית בעברית מתוך Google Sheets.
+- **תמיכה בקבצים גדולים:** טיפול חכם בפרקים ארוכים באמצעות העלאה מתמשכת (Resumable Upload), השומרת את הפרק כקובץ אחד שלם בדרייב מבלי לפצל אותו, תוך מניעת קריסות (שגיאות זיכרון).
+- **ממשק משתמש פשוט:** ניהול מנויים (דרך חיפוש ב-iTunes, הזנת כתובת RSS, או ייבוא OPML) דרך חלונית צד נקייה וידידותית בעברית מתוך Google Sheets, הכוללת גיבוי OPML אוטומטי ואפשרויות מיון.
 - **יומן פעילות מפורט:** מעקב מלא אחר כל ההורדות בגיליון ה-`Log`, כולל קישורים ישירים ונוחים לקבצים בדרייב.
 
 ## 🚀 איך זה עובד?
@@ -109,7 +111,7 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 1. **מנויים (`מנויים`):** המקום שבו נשמרים ההסכתים שהוספתם במערכת.
 2. **מנוע ההורדות (`Code.gs`):** 
    - טריגר אוטומטי פועל כל 6 שעות ובודק אם יצאו פרקים חדשים מאז תאריך ההרשמה שלכם להסכת.
-   - פרקים שממתינים להורדה נכנסים לגיליון תור נסתר (`תור הורדות`).
+   - פרקים שממתינים להורדה (וכן הורדות יזומות שביקשתם דרך הממשק) נכנסים לגיליון תור (`תור הורדות`).
    - "פועל רקע" (Worker) נפרד עובר על התור ומוריד את הפרקים אחד-אחד אל הדרייב שלכם ביעילות וללא חריגה מזמני הריצה המותרים של גוגל.
 3. **אחסון (תיקיית `הסכתים`):** קבצי השמע נשמרים תחת נתיב מסודר בדרייב: `הסכתים/<שם ההסכת>/`.
 4. **מעקב (`הורדות` ו-`Log`):** המערכת רושמת כל פרק שירד כדי לא להוריד אותו פעמיים, ומתעדת את התהליך (וההצלחה) ביומן הפעילות.
@@ -151,8 +153,10 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 | גיליון **`מנויים`** | רשימת המנויים: `כתובת RSS`, `שם`, `תמונה`, `תאריך הרשמה`, `סטטוס` (`פעיל` / `בוטל`) |
 | גיליון **`הורדות`** | קישורי הפרקים שכבר ירדו כדי למנוע כפילויות (`כתובת`) |
 | גיליון **`Log`** | יומן המערכת: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` ישיר לקובץ |
-| גיליון **`תור הורדות`** | *(מוסתר)* תור פנימי המנהל את הורדות הרקע של הפרקים |
+| גיליון **`תור הורדות`** | תור פנימי המנהל את הורדות הרקע של הפרקים |
+| גיליון **`Settings` / `הגדרות`** | הגדרות המערכת (כמו אופן מיון ההסכתים) |
 | מאפייני סקריפט | משתני מערכת: `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| כונן Drive **גיבויי OPML** | שני עותקי הגיבוי האחרונים של המנויים שלכם |
 | כונן Drive **`הסכתים/`** | התיקייה הראשית שבה נשמרים כל ההסכתים |
 | כונן Drive **`הסכתים/<שם ההסכת>/`** | קבצי ה-MP3 מסודרים לפי הסכת |
 
