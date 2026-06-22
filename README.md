@@ -3,7 +3,7 @@
 [![Google Apps Script](https://img.shields.io/badge/Google%20Apps%20Script-4285F4?style=flat&logo=google&logoColor=white)](https://developers.google.com/apps-script)
 [![Google Drive](https://img.shields.io/badge/Google%20Drive-4285F4?style=flat&logo=googledrive&logoColor=white)](https://drive.google.com/)
 
-[**🇮🇱 לקריאת המסמך בעברית, גללו למטה (Hebrew Version Below)**](#-podcast-to-drive---hebrew)
+[**🇮🇱 לקריאת המסמך בעברית, גללו למטה (Hebrew Version Below)**](#hebrew-version)
 
 **Podcast to Drive** is a smart, private, and ad-free podcast manager built entirely on Google Apps Script. It allows you to subscribe to your favorite podcasts and automatically downloads new episodes directly to your personal Google Drive, organizing them neatly so you can listen anywhere without relying on third-party apps.
 
@@ -101,6 +101,7 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 
 <div dir="rtl">
 
+<a id="hebrew-version"></a>
 # 🎙️ Podcast to Drive - בעברית
 
 המערכת **Podcast to Drive** (הסכת לדרייב) היא מנהל הסכתים חכם, פרטי ונקי מפרסומות, הבנוי כולו על גבי סביבת Google Apps Script. היא מאפשרת לכם להירשם להסכתים האהובים עליכם ומורידה אוטומטית פרקים חדשים ישירות ל-Google Drive האישי שלכם, כך שתוכלו להאזין להם מכל מקום בלי להיות תלויים באפליקציות צד-שלישי.
