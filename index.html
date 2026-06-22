@@ -259,11 +259,13 @@
 
       <details style="margin-top: 16px; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer;">
         <summary style="font-weight: bold; color: #1a73e8; outline: none;">הצץ לאיך זה נראה מבפנים</summary>
-        <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-          <img src="assets/ui-main.png" alt="מסך ראשי" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
-          <img src="assets/ui-episodes.png" alt="רשימת פרקים" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
-          <img src="assets/drive-folders.png" alt="תיקיות בדרייב" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
-          <img src="assets/drive-episodes.png" alt="פרקים בדרייב" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+        <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 15px;">
+          <img src="assets/ui-main.png" alt="מסך ראשי" style="max-width: 100%; border-radius: 6px; border: 1px solid var(--border); margin: 0 auto;">
+          <img src="assets/ui-episodes.png" alt="רשימת פרקים" style="max-width: 100%; border-radius: 6px; border: 1px solid var(--border); margin: 0 auto;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <img src="assets/drive-folders.png" alt="תיקיות בדרייב" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+            <img src="assets/drive-episodes.png" alt="פרקים בדרייב" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+          </div>
         </div>
       </details>
     </section>
