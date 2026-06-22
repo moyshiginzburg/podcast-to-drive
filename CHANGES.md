@@ -1,3 +1,8 @@
+## 2026-06-22 – Triton/Omny >2048 Char URL Limit Bypass
+- **Network Resilience:** Implemented a pure-Google Apps Script fallback mechanism (`attemptUrlBypassOnFailure`) to handle podcast servers (like Omny/Triton Digital) that redirect to massive ad-tracking URLs exceeding the 2,048 character limit of `UrlFetchApp`.
+- **Architecture:** The bypass engine triggers dynamically only upon an `UrlFetchApp` exception, parsing the failing bloated URL to extract and decode the native `fu=` fallback URL parameter, which allows direct connection to the underlying MP3 file without external proxies.
+- **Logging:** Added detailed `console.warn`, `console.log`, and `console.error` logs throughout the redirect loop to trace when the bypass engine fires and whether the fallback URL extraction was successful.
+
 ## 2026-06-21 – OPML Bulk Import Optimization
 - **Performance & Quota Fix:** Overhauled the OPML import process to use `UrlFetchApp.fetchAll` for parallel metadata fetching (in batches of 50) and bulk Google Sheets API writes (`setValues`). This reduces the import time of hundreds of podcasts from over 15 minutes to just a few seconds, completely eliminating Google Apps Script's 6-minute execution limit crashes and `ScriptApp` trigger quotas ("Service invoked too many times").
 - **Self-Healing:** In cases where RSS metadata fetching fails during OPML import due to timeouts, podcasts are imported gracefully without artwork, allowing the standard `podcastManager` background worker to automatically fetch and update missing titles and images during its normal 6-hour cycle.

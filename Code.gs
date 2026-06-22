@@ -937,6 +937,34 @@ function queryResumableSessionProgress(sessionUrl) {
  * @returns {Array<{fileId, fileName, driveUrl}>}
  */
 /**
+ * Purpose: A modular engine to resolve bloat-URLs that crash UrlFetchApp (>2048 chars).
+ * Triggered only when UrlFetchApp throws an error on a specific URL.
+ * @param {string} failedUrl - The URL that caused the fetch to fail.
+ * @returns {string|null} - A safe alternative URL if a known bypass strategy matches, else null.
+ */
+function attemptUrlBypassOnFailure(failedUrl) {
+  // Strategy 1: Fallback URL (fu) extraction (Common in Triton Digital / Omny / Megaphone)
+  // Many ad-tech providers nest the clean audio URL inside a 'fu' or 'fallback' query parameter.
+  try {
+    const fuMatch = failedUrl.match(/[?&]fu=([^&]+)/);
+    if (fuMatch && fuMatch[1]) {
+      const decodedFu = decodeURIComponent(fuMatch[1]);
+      if (decodedFu.startsWith('http')) {
+        console.log(`[URL Bypass] Strategy 1 triggered: Extracted valid 'fu' fallback URL.`);
+        return decodedFu;
+      }
+    }
+  } catch(e) {
+    console.error(`[URL Bypass] Strategy 1 parsing error: ${e.message}`);
+  }
+  
+  // Strategy 2: [Future strategies can be cleanly added here]
+  
+  console.log(`[URL Bypass] No matching bypass strategy found for the given URL.`);
+  return null;
+}
+
+/**
  * Purpose: Follows HTTP redirects manually while preserving custom headers (like Range).
  *   UrlFetchApp's native followRedirects drops custom headers across domains.
  * @returns {{ response: HTTPResponse, finalUrl: string }}
@@ -948,7 +976,23 @@ function fetchWithRedirects(url, options, maxRedirects) {
   opts.followRedirects = false;
   
   while (redirects > 0) {
-    const resp = UrlFetchApp.fetch(currentUrl, opts);
+    let resp;
+    try {
+      resp = UrlFetchApp.fetch(currentUrl, opts);
+    } catch (e) {
+      console.warn(`[URL Bypass] UrlFetchApp fetch failed. Error: ${e.message}. Attempting to run bypass engine...`);
+      // If UrlFetchApp fails (e.g. URL length > 2048), try to run our bypass engine
+      const bypassedUrl = attemptUrlBypassOnFailure(currentUrl);
+      if (bypassedUrl) {
+        console.log(`[URL Bypass] Bypass successful. Resuming fetch with safe URL (Length: ${bypassedUrl.length})`);
+        currentUrl = bypassedUrl;
+        continue; // Try fetching the new safe URL
+      }
+      console.error(`[URL Bypass] Bypass failed. Re-throwing original error.`);
+      // If no bypass found, re-throw the original error
+      throw e;
+    }
+    
     const code = resp.getResponseCode();
     if (code >= 300 && code < 400) {
       const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
