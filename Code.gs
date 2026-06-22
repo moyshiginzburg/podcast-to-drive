@@ -1077,7 +1077,9 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       downloadResp = chunkResult.response;
       directUrl = chunkResult.finalUrl;
     } catch (e) {
-      throw new Error(`שגיאת רשת בהורדת chunk ${chunkIndex}: ${e.message}`);
+      const err = new Error(`שגיאת רשת בהורדת chunk ${chunkIndex}: ${e.message}`);
+      err.isNetworkRetryable = true;
+      throw err;
     }
 
     const downloadCode = downloadResp.getResponseCode();
@@ -1181,7 +1183,9 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
         err.resumeSessionUrl = sessionUrl;
         throw err;
       }
-      throw new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${msg}`);
+      const err = new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${msg}`);
+      err.isNetworkRetryable = true;
+      throw err;
     }
     chunkPayload = null; // allow GC
 
@@ -1995,8 +1999,21 @@ function downloadWorker() {
       // run can resume the upload from where it left off without creating a duplicate file.
       job.resumeOffset = e.resumeOffset;
       job.resumeSessionUrl = e.resumeSessionUrl || null;
+      job.networkRetries = 0; // Reset retries on successful soft-stop progress
       updateDownloadQueueHead(job);
       debugStep('downloadWorker: soft-stop resume saved', debugSnippet(JSON.stringify(job), 200), runT0);
+    } else if (e && e.isNetworkRetryable) {
+      job.networkRetries = (job.networkRetries || 0) + 1;
+      const msg = e.message || String(e);
+      if (job.networkRetries <= 5) {
+        updateDownloadQueueHead(job);
+        writeLog(podcastTitle, job.episodeTitle || 'פרק', 'אזהרה', `שגיאת רשת זמנית, ניסיון ${job.networkRetries} מתוך 5. ממתין לריצה הבאה... (${msg})`);
+        debugStep('downloadWorker: network error retry scheduled', `retries=${job.networkRetries}`, runT0);
+      } else {
+        writeLog(podcastTitle, job.episodeTitle || 'פרק', 'שגיאה', `נכשל סופית לאחר 5 ניסיונות עקב שגיאות רשת. ${msg}`);
+        shiftDownloadQueue();
+        debugStep('downloadWorker: failed permanently after retries', debugSnippet(msg, 180), runT0);
+      }
     } else {
       const msg = e && e.message ? e.message : String(e);
       const note = (msg.includes('Range requests') || msg.includes('מגבלת UrlFetch'))
