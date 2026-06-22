@@ -943,7 +943,7 @@ function queryResumableSessionProgress(sessionUrl) {
  */
 function fetchWithRedirects(url, options, maxRedirects) {
   let currentUrl = url;
-  let redirects = maxRedirects || 7;
+  let redirects = maxRedirects || 20;
   const opts = Object.assign({}, options);
   opts.followRedirects = false;
   
