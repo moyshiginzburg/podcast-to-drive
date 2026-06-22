@@ -7,6 +7,14 @@
 
 **Podcast to Drive** is a smart, private, and ad-free podcast manager built entirely on Google Apps Script. It allows you to subscribe to your favorite podcasts and automatically downloads new episodes directly to your personal Google Drive, organizing them neatly so you can listen anywhere without relying on third-party apps.
 
+<div align="center">
+  <img src="assets/ui-main.png" alt="Podcast Manager Main UI" width="48%">
+  <img src="assets/ui-episodes.png" alt="Podcast Episodes View" width="48%">
+  <br>
+  <img src="assets/drive-folders.png" alt="Google Drive Folders" width="48%">
+  <img src="assets/drive-episodes.png" alt="Google Drive Audio Files" width="48%">
+</div>
+
 ---
 
 ## ✨ Features
@@ -96,6 +104,14 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 # 🎙️ Podcast to Drive - בעברית
 
 המערכת **Podcast to Drive** (הסכת לדרייב) היא מנהל הסכתים חכם, פרטי ונקי מפרסומות, הבנוי כולו על גבי סביבת Google Apps Script. היא מאפשרת לכם להירשם להסכתים האהובים עליכם ומורידה אוטומטית פרקים חדשים ישירות ל-Google Drive האישי שלכם, כך שתוכלו להאזין להם מכל מקום בלי להיות תלויים באפליקציות צד-שלישי.
+
+<div align="center">
+  <img src="assets/ui-main.png" alt="מנהל ההסכתים - מסך ראשי" width="48%">
+  <img src="assets/ui-episodes.png" alt="רשימת פרקים" width="48%">
+  <br>
+  <img src="assets/drive-folders.png" alt="תיקיות בדרייב" width="48%">
+  <img src="assets/drive-episodes.png" alt="פרקים בדרייב" width="48%">
+</div>
 
 ## ✨ תכונות מרכזיות
 - **ישירות לדרייב:** הורדת קבצי MP3 ישירות לתיקיית `הסכתים` ב-Google Drive שלכם.
