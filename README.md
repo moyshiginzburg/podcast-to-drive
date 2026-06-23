@@ -92,6 +92,7 @@ If you want to deploy the code yourself or contribute:
 - **`PERMISSION_DENIED` Error:** If you see an error saying "PERMISSION_DENIED" when opening or using the sidebar, this is a known Google Apps Script issue caused by being logged into **multiple Google accounts** in the same browser session.
   - *Solution:* Open the spreadsheet in an **Incognito/Private window**, or use a dedicated browser profile where only one Google account is logged in.
 - **Mobile Support:** The podcast manager UI (Custom Menu and Sidebar) can **only be accessed from a computer browser**. The Google Sheets mobile app does not support custom menus or sidebars. However, the automatic background downloads will continue to work normally regardless of the device you use.
+- **Internet Filters & Firewalls:** The initial installation and the management sidebar rely on your local internet connection, so strict internet filters may cause issues during setup or when searching for new podcasts. However, background downloads are executed on Google's servers and sent directly to Google Drive. This means that once a podcast is successfully subscribed to, its episodes will continue to download seamlessly regardless of any local network restrictions.
 
 ## 📄 License
 This project is licensed under the [AGPL-3.0 License](LICENSE).
@@ -183,6 +184,7 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 - **שגיאת `PERMISSION_DENIED` בחלונית הניהול:** אם נתקלתם בשגיאה בסגנון "אירעה שגיאת שרת... PERMISSION_DENIED", מדובר בבעיה מוכרת של גוגל שמתרחשת כאשר **מספר חשבונות גוגל שונים מחוברים לאותו דפדפן** במקביל.
   - *פתרון:* פתחו את הגיליון ב**חלון גלישה בסתר (Incognito)**, או השתמשו בפרופיל דפדפן (כמו פרופיל כרום) שבו מחובר אך ורק חשבון גוגל אחד.
 - **שימוש בטלפון הנייד:** ניהול ההסכתים (הוספת מנויים, פתיחת תפריט ההסכתים) **אפשרי ממחשב בלבד**. אפליקציית Google Sheets בטלפון אינה תומכת בתפריטים מותאמים אישית או חלוניות צד. עם זאת, הורדות הרקע האוטומטיות ימשיכו לפעול כרגיל בלי קשר למכשיר שבו אתם משתמשים.
+- **סינוני אינטרנט וחסימות רשת:** שלב ההתקנה הראשונית וחלונית הניהול תלויים בחיבור האינטרנט המקומי שלכם, ולכן בחלק משירותי הסינון ייתכנו בעיות בעת ההתקנה או בחיפוש והרשמה להסכתים חדשים. אולם, הורדות הרקע מבוצעות בצד השרת של גוגל ומגיעות ישירות ל-Google Drive. המשמעות היא שמרגע שהסכת הוגדר בהצלחה במערכת, הפרקים שלו ימשיכו לרדת באופן שוטף גם כאשר אתם מחוברים לאינטרנט מסונן.
 
 ## 📄 רישיון
 הפרויקט פועל תחת רישיון קוד פתוח [AGPL-3.0 License](LICENSE).
