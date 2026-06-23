@@ -1832,7 +1832,7 @@ function cleanupOldOPMLs() {
   }
   files.sort((a, b) => b.getLastUpdated().getTime() - a.getLastUpdated().getTime());
   
-  for (let i = 2; i < files.length; i++) {
+  for (let i = 1; i < files.length; i++) {
     files[i].setTrashed(true);
   }
 }
