@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-06-22
+ * Version: 2026-06-23
  * License: AGPL-3.0
  */
 
@@ -1506,7 +1506,7 @@ function downloadEpisode(episodeData) {
   }
 }
 
-/** iTunes podcast search – runs server-side to bypass client network restrictions */
+/** iTunes podcast search – runs server-side */
 function searchPodcasts(query) {
   try {
     const url = `https://itunes.apple.com/search?media=podcast&term=${encodeURIComponent(query)}&limit=20`;
@@ -1532,6 +1532,53 @@ function searchPodcasts(query) {
   } catch (e) {
     return { success: false, error: e.message };
   }
+}
+
+/** Logs the dual search results from the client side into the GAS execution logs */
+function logDualSearchResults(logData) {
+  console.log(`[Dual Search] Query: "${logData.query}"`);
+  console.log(`[Dual Search] iTunes found: ${logData.itunesCount}`);
+  if (logData.itunesTitles && logData.itunesTitles.length > 0) {
+    console.log(`[Dual Search] iTunes Top Results: \n` + logData.itunesTitles.join('\n'));
+  }
+  
+  console.log(`[Dual Search] Podcast Index found: ${logData.piCount}`);
+  if (logData.piTitles && logData.piTitles.length > 0) {
+    console.log(`[Dual Search] Podcast Index Top Results: \n` + logData.piTitles.join('\n'));
+  }
+  
+  console.log(`[Dual Search] Combined Unique Results shown to user: ${logData.combinedCount}`);
+}
+
+/** 
+ * Podcast Index Auth Headers for client-side dual search.
+ * Computes the required SHA-1 authorization signature dynamically.
+ */
+function getPodcastIndexAuthHeaders() {
+  let keys = null;
+  // Prefer the secret keys file if it exists (clasp pushes it, but git ignores it).
+  // Otherwise fallback to the open source template file keys.
+  if (this.getPodcastIndexKeys_Secret) {
+    keys = this.getPodcastIndexKeys_Secret();
+  } else if (this.getPodcastIndexKeys_Template) {
+    keys = this.getPodcastIndexKeys_Template();
+  }
+
+  if (!keys || !keys.apiKey || !keys.apiSecret || keys.apiKey === "YOUR_API_KEY") {
+    return null; // Signals the client-side to skip PI search silently
+  }
+
+  const authDate = Math.floor(Date.now() / 1000).toString();
+  const data = keys.apiKey + keys.apiSecret + authDate;
+  const signatureBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, data);
+  const signatureHex = signatureBytes.map(byte => (byte < 0 ? byte + 256 : byte).toString(16).padStart(2, '0')).join('');
+
+  return {
+    "X-Auth-Date": authDate,
+    "X-Auth-Key": keys.apiKey,
+    "Authorization": signatureHex,
+    "User-Agent": "Podcast-to-Drive/1.0"
+  };
 }
 
 // ============================================================

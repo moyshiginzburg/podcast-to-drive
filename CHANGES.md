@@ -1,3 +1,8 @@
+## 2026-06-23 – Podcast Index Dual Search
+- **Dual Search Architecture:** Implemented a hybrid search engine combining server-side iTunes queries and client-side Podcast Index queries. Both queries execute concurrently using `Promise.allSettled`.
+- **Silent Fallback:** Designed with high network resilience. If a client-side search fails due to local network restrictions, firewalls, or CORS issues, the error is caught silently, and the UI seamlessly falls back to displaying the server-side results without any visible crash.
+- **Open Source Secrets Management:** Added a `Secrets.gs` approach to manage API credentials. It allows the script to be fully functional "out-of-the-box" when users copy the Google Sheet, while strictly keeping the GitHub repository clean from exposed secrets to prevent automated bot scraping.
+
 ## 2026-06-22 – Triton/Omny >2048 Char URL Limit Bypass
 - **Network Resilience:** Implemented a pure-Google Apps Script fallback mechanism (`attemptUrlBypassOnFailure`) to handle podcast servers (like Omny/Triton Digital) that redirect to massive ad-tracking URLs exceeding the 2,048 character limit of `UrlFetchApp`.
 - **Architecture:** The bypass engine triggers dynamically only upon an `UrlFetchApp` exception, parsing the failing bloated URL to extract and decode the native `fu=` fallback URL parameter, which allows direct connection to the underlying MP3 file without external proxies.

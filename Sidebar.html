@@ -472,7 +472,7 @@
 
 </div>
 
-<div style="text-align: center; padding: 4px; font-size: 10px; color: #888; flex-shrink: 0; user-select: none;">Built by <a href="mailto:moyshiginzburg@gmail.com" style="color: #888; text-decoration: none;">Moyshi</a> | גרסה 22.06.2026</div>
+<div style="text-align: center; padding: 4px; font-size: 10px; color: #888; flex-shrink: 0; user-select: none;">Built by <a href="mailto:moyshiginzburg@gmail.com" style="color: #888; text-decoration: none;">Moyshi</a> | גרסה 23.06.2026</div>
 
 <!-- ══ RSS URL modal ═══════════════════════════════════════════ -->
 <div id="rss-modal">
@@ -615,8 +615,8 @@ function renderPodcastList() {
 const fetchedPodcasts = {};
 
 function togglePodcastDesc(btn, url) {
-  const safeId = url.replace(/[^a-zA-Z0-9]/g, '');
-  const container = document.getElementById('pod-desc-' + safeId);
+  const itemNode = btn.closest('.podcast-item, .result-item');
+  const container = itemNode.querySelector('.pod-desc-container');
   const content = container.querySelector('.pod-desc-content');
   
   const isOpen = container.classList.toggle('visible');
@@ -788,22 +788,107 @@ function runSearch() {
   if (!query) return;
 
   const container = document.getElementById('search-results-list');
-  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>מחפש...</div>`;
+  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>מחפש (Apple Podcasts + Podcast Index)...</div>`;
   showScreen('screen-search');
   document.getElementById('search-bar').classList.remove('visible');
 
-  google.script.run
-    .withSuccessHandler(result => {
-      if (!result.success) {
-        container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(result.error)}</div>`;
-        return;
-      }
-      renderSearchResults(result.results || []);
-    })
-    .withFailureHandler(err => {
-      container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(err.message)}</div>`;
-    })
-    .searchPodcasts(query);
+  // Promise 1: iTunes search (server-side)
+  const itunesPromise = new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res.success) reject(new Error(res.error));
+        else resolve(res.results || []);
+      })
+      .withFailureHandler(err => reject(err))
+      .searchPodcasts(query);
+  });
+
+  // Promise 2: Podcast Index search (client-side)
+  const piPromise = new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(headers => {
+        if (!headers) return resolve([]); // Silently skip if keys are missing
+        
+        const url = `https://api.podcastindex.org/api/1.0/search/byterm?q=${encodeURIComponent(query)}&max=20`;
+        fetch(url, { headers: headers })
+          .then(res => {
+             if (!res.ok) throw new Error('PI HTTP error ' + res.status);
+             return res.json();
+          })
+          .then(data => {
+             const results = (data.feeds || []).map(f => ({
+                trackName: f.title || '',
+                artistName: f.author || '',
+                artworkUrl: f.image || f.artwork || '',
+                feedUrl: f.url,
+                genre: '',
+                isSubscribed: false // Evaluated later
+             }));
+             resolve(results);
+          })
+          .catch(err => {
+             console.warn("Podcast Index search failed silently:", err);
+             resolve([]); // Silent catch
+          });
+      })
+      .withFailureHandler(err => {
+        console.warn("Failed to get PI headers:", err);
+        resolve([]); // Silent catch if server function fails
+      })
+      .getPodcastIndexAuthHeaders();
+  });
+
+  Promise.allSettled([itunesPromise, piPromise]).then(results => {
+    let allResults = [];
+    
+    // Process iTunes
+    if (results[0].status === 'fulfilled') {
+       console.log(`[Search] iTunes returned ${results[0].value.length} results for: "${query}"`, results[0].value);
+       allResults = allResults.concat(results[0].value);
+    } else {
+       console.error(`[Search] iTunes search failed for: "${query}"`, results[0].reason);
+    }
+
+    // Process PI
+    if (results[1].status === 'fulfilled') {
+       const piResults = results[1].value;
+       console.log(`[Search] Podcast Index returned ${piResults.length} results for: "${query}"`, piResults);
+       const existingUrls = new Set(allResults.map(r => r.feedUrl));
+       for (const r of piResults) {
+          if (!existingUrls.has(r.feedUrl) && r.feedUrl) {
+             allResults.push(r);
+             existingUrls.add(r.feedUrl);
+          }
+       }
+    } else {
+       console.error(`[Search] Podcast Index search failed for: "${query}"`, results[1].reason);
+    }
+
+    console.log(`[Search] Combined results displayed to user: ${allResults.length}`, allResults);
+
+    // Send telemetry to GAS execution logs
+    const logData = {
+       query: query,
+       itunesCount: results[0].status === 'fulfilled' ? results[0].value.length : 0,
+       piCount: results[1].status === 'fulfilled' ? results[1].value.length : 0,
+       itunesTitles: results[0].status === 'fulfilled' ? results[0].value.map(r => r.trackName).slice(0, 10) : [],
+       piTitles: results[1].status === 'fulfilled' ? results[1].value.map(r => r.trackName).slice(0, 10) : [],
+       combinedCount: allResults.length
+    };
+    google.script.run.logDualSearchResults(logData);
+
+    // Evaluate isSubscribed against global 'subscriptions' array
+    allResults.forEach(r => {
+       r.isSubscribed = subscriptions.some(s => s.url === r.feedUrl);
+    });
+
+    if (allResults.length === 0 && results[0].status === 'rejected') {
+       container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(results[0].reason.message || 'שגיאת חיפוש')}</div>`;
+       return;
+    }
+
+    renderSearchResults(allResults);
+  });
 }
 
 function renderSearchResults(results) {
@@ -821,8 +906,8 @@ function renderSearchResults(results) {
     item.innerHTML = `
       <div class="result-main-row">
         ${r.artworkUrl
-          ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.style.display='none'">`
-          : `<div class="result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;">🎙</div>`}
+          ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.replaceWith(makePlaceholder())">`
+          : `<div class="podcast-thumb-placeholder">🎙</div>`}
         <div class="result-info">
           <div class="result-name">${escHtml(r.trackName)}</div>
           <div class="result-artist">${escHtml(r.artistName)}</div>
