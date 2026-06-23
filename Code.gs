@@ -69,17 +69,63 @@ function debugStep(label, detail, runT0) {
 // ============================================================
 
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('🎙 הסכתים')
+  let isAutoOn = false;
+  let isAutoOff = false;
+  
+  try {
+    const props = PropertiesService.getScriptProperties();
+    let flag = props.getProperty('autoDownloadEnabled');
+    
+    if (!flag) {
+      // First time migrating to property flag (or user deleted property).
+      // Attempt to read triggers if we happen to have permissions.
+      try {
+        const triggers = getPeriodicTriggers();
+        flag = triggers.length > 0 ? 'true' : 'false';
+        props.setProperty('autoDownloadEnabled', flag);
+      } catch (e) {
+        // If no permissions yet (e.g. brand new user), assume it's ON visually
+        // because authorizeAndInit() will auto-install it anyway.
+        flag = 'true';
+      }
+    }
+
+    if (flag === 'true') {
+      isAutoOn = true;
+    } else if (flag === 'false') {
+      isAutoOff = true;
+    }
+  } catch (e) {
+    // Ignore errors before initial authorization
+  }
+
+  const menu = SpreadsheetApp.getUi().createMenu('🎙 הסכתים')
     .addItem('פתח מנהל הסכתים', 'showSidebar')
     .addSeparator()
-    .addItem('הפעל הורדה עכשיו', 'podcastManager')
-    .addItem('התקן טריגר אוטומטי (כל 6 שעות)', 'installTrigger')
-    .addItem('הסר טריגר אוטומטי', 'uninstallTrigger')
-    .addToUi();
+    .addItem('הפעל הורדה עכשיו', 'podcastManager');
+
+  if (isAutoOn) {
+    menu.addItem('✓ הגדר הורדה אוטומטית (כל 6 שעות)', 'menuEnableAuto');
+    menu.addItem('כבה הורדה אוטומטית', 'menuDisableAuto');
+  } else if (isAutoOff) {
+    menu.addItem('הגדר הורדה אוטומטית (כל 6 שעות)', 'menuEnableAuto');
+    menu.addItem('✓ כבה הורדה אוטומטית', 'menuDisableAuto');
+  } else {
+    menu.addItem('הגדר הורדה אוטומטית (כל 6 שעות)', 'menuEnableAuto');
+    menu.addItem('כבה הורדה אוטומטית', 'menuDisableAuto');
+  }
+
+  menu.addToUi();
 }
 
 function showSidebar() {
+  // Sync the autoDownloadEnabled property when sidebar is opened (since we have full auth here)
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const triggers = getPeriodicTriggers();
+    props.setProperty('autoDownloadEnabled', triggers.length > 0 ? 'true' : 'false');
+  } catch (e) {}
+
   const html = HtmlService.createHtmlOutputFromFile('Sidebar')
     .setTitle('🎙 מנהל הסכתים')
     .setWidth(720)
@@ -91,14 +137,25 @@ function showSidebar() {
 // TRIGGER MANAGEMENT
 // ============================================================
 
+function menuEnableAuto() {
+  installTrigger();
+  SpreadsheetApp.getUi().alert('ההורדה האוטומטית הופעלה בהצלחה (ותרוץ כל 6 שעות).\n* שימו לב: סימון ה-✓ בתפריט יתעדכן רק לאחר ריענון של העמוד.');
+}
+
+function menuDisableAuto() {
+  uninstallTrigger();
+  SpreadsheetApp.getUi().alert('ההורדה האוטומטית כובתה.\n* שימו לב: סימון ה-✓ בתפריט יוסר רק לאחר ריענון של העמוד.');
+}
+
 function installTrigger() {
   uninstallTrigger();
   ScriptApp.newTrigger('podcastManager').timeBased().everyHours(6).create();
-  SpreadsheetApp.getUi().alert('טריגר אוטומטי הותקן – יפעל כל 6 שעות.');
+  PropertiesService.getScriptProperties().setProperty('autoDownloadEnabled', 'true');
 }
 
 function uninstallTrigger() {
   getPeriodicTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+  PropertiesService.getScriptProperties().setProperty('autoDownloadEnabled', 'false');
 }
 
 function getPeriodicTriggers() {
@@ -2142,7 +2199,8 @@ function getLastAutoRunLabel() {
  *   to the spreadsheet menu (🎙 הסכתים). Pair with `createStartSheet` and a button that runs this.
  */
 function authorizeAndInit() {
-  SpreadsheetApp.getUi().alert('✓ ההרשאות אושרו בהצלחה! כעת השתמש בתפריט 🎙 הסכתים למעלה.');
+  installTrigger();
+  SpreadsheetApp.getUi().alert('✓ ההרשאות אושרו בהצלחה! כעת אפשר להוסיף הסכתים מתפריט 🎙 הסכתים למעלה.');
 }
 
 /**
