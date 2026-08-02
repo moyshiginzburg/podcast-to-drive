@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-06-23
+ * Version: 2026-08-02
  * License: AGPL-3.0
  */
 
@@ -198,16 +198,19 @@ function deleteDownloadWorkerTrigger() {
   props.deleteProperty(PROP_DOWNLOAD_WORKER_TRIG);
 }
 
+/**
+ * Purpose: Schedule (or re-schedule) the downloadWorker to run after `delayMs` milliseconds.
+ * Operation: Always deletes any previously stored worker trigger first, then creates a fresh
+ *   one-shot time-based trigger. This "delete-and-recreate" approach prevents a deadlock where
+ *   a stale trigger (e.g. one that failed with a Google INTERNAL error before the worker could
+ *   delete it) remains registered but disabled, causing all future scheduling attempts to
+ *   no-op because the trigger technically "exists" in getProjectTriggers().
+ *   Safe to call repeatedly — the worker is idempotent (checks the queue on entry).
+ */
 function scheduleDownloadWorkerAfterMs(delayMs) {
-  const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty(PROP_DOWNLOAD_WORKER_TRIG);
-  if (id) {
-    const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === id);
-    if (exists) return;
-    props.deleteProperty(PROP_DOWNLOAD_WORKER_TRIG);
-  }
+  deleteDownloadWorkerTrigger();
   const trig = ScriptApp.newTrigger('downloadWorker').timeBased().after(delayMs).create();
-  props.setProperty(PROP_DOWNLOAD_WORKER_TRIG, trig.getUniqueId());
+  PropertiesService.getScriptProperties().setProperty(PROP_DOWNLOAD_WORKER_TRIG, trig.getUniqueId());
 }
 
 // ============================================================

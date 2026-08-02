@@ -1,3 +1,9 @@
+## 2026-08-02 – Fix Stale Worker Trigger Deadlock
+
+- **Bug Fix:** Fixed a critical edge case where a Google `INTERNAL` server error crashing `downloadWorker` on the very first line (before it could delete its own one-shot trigger) left a "dead" trigger permanently registered. All subsequent calls to `scheduleDownloadWorkerAfterMs` saw this stale trigger via `getProjectTriggers()` and returned early, believing the worker was already scheduled. This silently blocked **all** podcast downloads (both automatic and manual) until the trigger was manually deleted by the user.
+- **Root Cause:** Google Apps Script's `after()` one-shot triggers remain in `getProjectTriggers()` even after they are disabled ("expired") following execution. The old scheduling logic checked `exists` but not whether the trigger was still active/pending.
+- **Fix:** `scheduleDownloadWorkerAfterMs` now always deletes the old trigger and creates a fresh one ("delete-and-recreate") instead of returning early when a trigger ID is found. This is safe because the worker is idempotent — it checks the download queue on entry and no-ops if empty.
+
 ## 2026-06-23 – Podcast Index Dual Search
 - **Dual Search Architecture:** Implemented a hybrid search engine combining server-side iTunes queries and client-side Podcast Index queries. Both queries execute concurrently using `Promise.allSettled`.
 - **Silent Fallback:** Designed with high network resilience. If a client-side search fails due to local network restrictions, firewalls, or CORS issues, the error is caught silently, and the UI seamlessly falls back to displaying the server-side results without any visible crash.
