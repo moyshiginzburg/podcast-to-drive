@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-08-02
+ * Version: 2026-08-26
  * License: AGPL-3.0
  */
 
@@ -998,29 +998,50 @@ function queryResumableSessionProgress(sessionUrl) {
  */
 /**
  * Purpose: A modular engine to resolve bloat-URLs that crash UrlFetchApp (>2048 chars).
- * Triggered only when UrlFetchApp throws an error on a specific URL.
+ * Triggered by the DFS Backtracking engine in fetchWithRedirects when UrlFetchApp throws an error.
+ * 
+ * HOW TO ADD A NEW STRATEGY (e.g., Strategy 3):
+ * 1. Add an `else if (strategyIndex === 3) { ... }` block below.
+ * 2. IMPORTANT: You MUST go to `fetchWithRedirects` and update `const MAX_STRATEGIES = 3;` 
+ *    Otherwise, the DFS backtracking loop will never reach your new strategy!
+ *
  * @param {string} failedUrl - The URL that caused the fetch to fail.
- * @returns {string|null} - A safe alternative URL if a known bypass strategy matches, else null.
+ * @param {number} strategyIndex - The specific strategy number (1, 2, 3...) to attempt.
+ * @returns {string|null} - A safe alternative URL if the strategy matches, else null.
  */
-function attemptUrlBypassOnFailure(failedUrl) {
-  // Strategy 1: Fallback URL (fu) extraction (Common in Triton Digital / Omny / Megaphone)
-  // Many ad-tech providers nest the clean audio URL inside a 'fu' or 'fallback' query parameter.
-  try {
-    const fuMatch = failedUrl.match(/[?&]fu=([^&]+)/);
-    if (fuMatch && fuMatch[1]) {
-      const decodedFu = decodeURIComponent(fuMatch[1]);
-      if (decodedFu.startsWith('http')) {
-        console.log(`[URL Bypass] Strategy 1 triggered: Extracted valid 'fu' fallback URL.`);
-        return decodedFu;
+function attemptUrlBypassStrategy(failedUrl, strategyIndex) {
+  if (strategyIndex === 1) {
+    // Strategy 1: Fallback URL (fu) extraction (Common in Triton Digital / Omny / Megaphone)
+    // Many ad-tech providers nest the clean audio URL inside a 'fu' or 'fallback' query parameter.
+    try {
+      const fuMatch = failedUrl.match(/[?&]fu=([^&]+)/);
+      if (fuMatch && fuMatch[1]) {
+        const decodedFu = decodeURIComponent(fuMatch[1]);
+        if (decodedFu.startsWith('http')) {
+          console.log(`[URL Bypass] Strategy 1 triggered: Extracted valid 'fu' fallback URL.`);
+          return decodedFu;
+        }
       }
+    } catch(e) {
+      console.error(`[URL Bypass] Strategy 1 parsing error: ${e.message}`);
     }
-  } catch(e) {
-    console.error(`[URL Bypass] Strategy 1 parsing error: ${e.message}`);
+  } else if (strategyIndex === 2) {
+    // Strategy 2: Omny Studio / Triton Digital Direct CDN Extraction
+    // Omny tracking URLs can exceed 2048 characters due to heavy metadata.
+    // We can extract the core IDs and bypass to their direct CDN.
+    try {
+      const omnyMatch = failedUrl.match(/\b(?:omny-us\.pdn\.tritondigital\.com\/v1\/download|traffic\.omny\.fm\/d\/clips)\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-z0-9-]+)/i);
+      if (omnyMatch && omnyMatch.length === 4) {
+        const cleanUrl = `https://www.omnycontent.com/d/clips/${omnyMatch[1]}/${omnyMatch[2]}/${omnyMatch[3]}/audio.mp3`;
+        console.log(`[URL Bypass] Strategy 2 triggered: Reconstructed clean Omny CDN URL.`);
+        return cleanUrl;
+      }
+    } catch(e) {
+      console.error(`[URL Bypass] Strategy 2 parsing error: ${e.message}`);
+    }
   }
   
-  // Strategy 2: [Future strategies can be cleanly added here]
-  
-  console.log(`[URL Bypass] No matching bypass strategy found for the given URL.`);
+  // Strategy 3: [Add new strategies above and update MAX_STRATEGIES in fetchWithRedirects]
   return null;
 }
 
@@ -1035,21 +1056,51 @@ function fetchWithRedirects(url, options, maxRedirects) {
   const opts = Object.assign({}, options);
   opts.followRedirects = false;
   
+  const bypassStack = [];
+  const MAX_STRATEGIES = 2; // IMPORTANT: Increase this if you add new strategies in attemptUrlBypassStrategy()
+  
   while (redirects > 0) {
     let resp;
     try {
       resp = UrlFetchApp.fetch(currentUrl, opts);
     } catch (e) {
       console.warn(`[URL Bypass] UrlFetchApp fetch failed. Error: ${e.message}. Attempting to run bypass engine...`);
-      // If UrlFetchApp fails (e.g. URL length > 2048), try to run our bypass engine
-      const bypassedUrl = attemptUrlBypassOnFailure(currentUrl);
-      if (bypassedUrl) {
-        console.log(`[URL Bypass] Bypass successful. Resuming fetch with safe URL (Length: ${bypassedUrl.length})`);
-        currentUrl = bypassedUrl;
-        continue; // Try fetching the new safe URL
+      
+      // Is this crashing URL already on the top of the stack?
+      if (bypassStack.length === 0 || bypassStack[bypassStack.length - 1].url !== currentUrl) {
+        // Check if it's already in the stack somewhere else (a cycle)
+        const cycleIndex = bypassStack.findIndex(item => item.url === currentUrl);
+        if (cycleIndex !== -1) {
+          console.warn(`[URL Bypass] Cycle detected for URL. Backtracking...`);
+        } else {
+          // New crashing URL. Push it to the stack.
+          bypassStack.push({ url: currentUrl, strategyIndex: 0 });
+        }
       }
-      console.error(`[URL Bypass] Bypass failed. Re-throwing original error.`);
-      // If no bypass found, re-throw the original error
+      
+      let bypassedUrl = null;
+      while (bypassStack.length > 0) {
+        const top = bypassStack[bypassStack.length - 1];
+        if (top.strategyIndex < MAX_STRATEGIES) {
+          top.strategyIndex++;
+          bypassedUrl = attemptUrlBypassStrategy(top.url, top.strategyIndex);
+          if (bypassedUrl) {
+            break; // Found a branch to explore!
+          }
+        } else {
+          // Exhausted all strategies for this URL. Pop it and backtrack.
+          bypassStack.pop();
+          console.log(`[URL Bypass] Exhausted all strategies for URL, backtracking...`);
+        }
+      }
+      
+      if (bypassedUrl) {
+        console.log(`[URL Bypass] Bypass successful via strategy. Resuming fetch with safe URL (Length: ${bypassedUrl.length})`);
+        currentUrl = bypassedUrl;
+        continue;
+      }
+      
+      console.error(`[URL Bypass] Exhausted all bypass strategies (Backtracking failed). Re-throwing original error.`);
       throw e;
     }
     

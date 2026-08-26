@@ -1,3 +1,8 @@
+## 2026-08-26 – Omny CDN Direct Extraction & Iterative DFS Backtracking Bypass Engine
+
+- **Feature:** Expanded the `attemptUrlBypassStrategy` engine with Strategy 2 to handle `traffic.omny.fm` and `omny-us.pdn.tritondigital.com` tracking URLs that lack the `fu=` fallback parameter but exceed the 2048-character limit. The engine extracts the core IDs from the crashing URL to reconstruct a short, clean `www.omnycontent.com` CDN URL.
+- **Architecture:** Overhauled the URL bypass mechanism in `fetchWithRedirects` to use an iterative Depth-First Search (DFS) backtracking algorithm via a custom `bypassStack`. Instead of blindly failing on a bypass loop, the system now maintains a stack of all crashed URLs and the specific bypass strategies attempted on each. This allows the script to elegantly backtrack to previous nodes in the redirect chain and try alternative strategies (e.g. falling back to Strategy 2 if Strategy 1 yields a dead-end) ensuring all possible fallback routes are exhausted before failing, while protecting against infinite loops without relying on memory-heavy recursion.
+
 ## 2026-08-02 – Fix Stale Worker Trigger Deadlock
 
 - **Bug Fix:** Fixed a critical edge case where a Google `INTERNAL` server error crashing `downloadWorker` on the very first line (before it could delete its own one-shot trigger) left a "dead" trigger permanently registered. All subsequent calls to `scheduleDownloadWorkerAfterMs` saw this stale trigger via `getProjectTriggers()` and returned early, believing the worker was already scheduled. This silently blocked **all** podcast downloads (both automatic and manual) until the trigger was manually deleted by the user.
