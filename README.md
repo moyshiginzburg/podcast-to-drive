@@ -81,8 +81,8 @@ If you want to deploy the code yourself or contribute:
 | Sheet **`הורדות`** | Downloaded episode URLs (`כתובת`) |
 | Sheet **`Log`** | Columns: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` |
 | Sheet **`תור הורדות`** | Internal queue for the background downloader |
-| Sheet **`Settings`** | User preferences, like podcast sorting order |
-| Script **Properties** | `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| Sheet **`הגדרות`** | User preferences, like podcast sorting order |
+| Script **Properties** | `autoDownloadEnabled`, `lastRunTime`, `resumeState`, `oneTimeTrigId`, `downloadWorkerTrigId`, `autoOpmlTrigId` |
 | Drive **OPML Backup** | An OPML backup of your subscriptions |
 | Drive **`הסכתים/`** | Root folder for audio files |
 | Drive **`הסכתים/<podcast name>/`** | MP3 files per podcast |
@@ -172,8 +172,8 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 | גיליון **`הורדות`** | קישורי הפרקים שכבר ירדו כדי למנוע כפילויות (`כתובת`) |
 | גיליון **`Log`** | יומן המערכת: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` ישיר לקובץ |
 | גיליון **`תור הורדות`** | תור פנימי המנהל את הורדות הרקע של הפרקים |
-| גיליון **`Settings` / `הגדרות`** | הגדרות המערכת (כמו אופן מיון ההסכתים) |
-| מאפייני סקריפט | משתני מערכת: `lastRunTime`, `resumeState`, `downloadWorkerTrigId` |
+| גיליון **`הגדרות`** | הגדרות המערכת (כמו אופן מיון ההסכתים) |
+| מאפייני סקריפט | משתני מערכת: `autoDownloadEnabled`, `lastRunTime`, `resumeState`, `oneTimeTrigId`, `downloadWorkerTrigId`, `autoOpmlTrigId` |
 | כונן Drive **גיבוי OPML** | עותק גיבוי של המנויים שלכם |
 | כונן Drive **`הסכתים/`** | התיקייה הראשית שבה נשמרים כל ההסכתים |
 | כונן Drive **`הסכתים/<שם ההסכת>/`** | קבצי ה-MP3 מסודרים לפי הסכת |

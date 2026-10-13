@@ -2,7 +2,7 @@
  * Podcast to Drive
  * Author: Moyshi
  * GitHub: https://github.com/moyshiginzburg/podcast-to-drive
- * Version: 2026-08-26
+ * Version: 2026-10-13
  * License: AGPL-3.0
  */
 
@@ -39,11 +39,86 @@ const DOWNLOAD_QUEUE_HEADERS = ['payload'];
  * required by the Drive Resumable Upload API for non-final chunks.
  */
 const CHUNK_SIZE = 45 * 1024 * 1024; // 45 MB – safe with Blob-passthrough (no JS-heap expansion)
-const URL_FETCH_RESPONSE_LIMIT = 50 * 1024 * 1024; // Apps Script UrlFetch response cap
 const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 60 * 1000; // 1 minute (to prevent Google scheduler throttling)
-/** Script property key that persists a Drive Resumable Upload session URL across worker runs. */
-const PROP_RESUMABLE_SESSION = 'resumableSessionUrl';
+/** Extension given to an episode file when its real type cannot be determined. */
+const DEFAULT_FILE_EXTENSION = 'mp3';
+/**
+ * Purpose: The file types the downloader recognizes by name, and the MIME type each one is
+ *   uploaded to Drive with. An RSS enclosure is not necessarily audio: feeds also publish video,
+ *   documents, images and archives, and every one of them must keep its real extension.
+ * Operation: `detectFileExtension` trusts a URL extension that appears here, and
+ *   `downloadResumable` uses the value as the Drive MIME type. This table is NOT a whitelist:
+ *   a type missing from it is still saved correctly, with the extension taken from the server's
+ *   Content-Type or from the URL (see `detectFileExtension`).
+ */
+const MIME_TYPE_BY_EXTENSION = {
+  // Audio
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', m4b: 'audio/mp4', ogg: 'audio/ogg', oga: 'audio/ogg',
+  opus: 'audio/ogg', aac: 'audio/aac', wav: 'audio/wav', flac: 'audio/flac', wma: 'audio/x-ms-wma',
+  aiff: 'audio/aiff', aif: 'audio/aiff', weba: 'audio/webm', amr: 'audio/amr', mid: 'audio/midi',
+  // Video
+  mp4: 'video/mp4', m4v: 'video/x-m4v', mov: 'video/quicktime', webm: 'video/webm',
+  mkv: 'video/x-matroska', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', mpg: 'video/mpeg',
+  mpeg: 'video/mpeg', ogv: 'video/ogg', '3gp': 'video/3gpp', flv: 'video/x-flv', ts: 'video/mp2t',
+  // Documents
+  pdf: 'application/pdf', epub: 'application/epub+zip', txt: 'text/plain', rtf: 'application/rtf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv', srt: 'application/x-subrip', vtt: 'text/vtt',
+  // Images
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+  svg: 'image/svg+xml', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
+  // Archives
+  zip: 'application/zip', rar: 'application/vnd.rar', '7z': 'application/x-7z-compressed',
+  gz: 'application/gzip', tar: 'application/x-tar'
+};
+/**
+ * Purpose: Translate a server's Content-Type into a file extension when the URL has no usable one.
+ * Operation: Exact (lowercase, parameters stripped) MIME type -> extension. Holds the canonical
+ *   types of `MIME_TYPE_BY_EXTENSION` plus the common non-standard aliases servers send.
+ */
+const EXTENSION_BY_MIME_TYPE = {
+  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mpeg3': 'mp3', 'audio/x-mpeg': 'mp3',
+  'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a', 'audio/x-m4b': 'm4b',
+  'audio/ogg': 'ogg', 'application/ogg': 'ogg', 'audio/opus': 'opus',
+  'audio/aac': 'aac', 'audio/x-aac': 'aac', 'audio/aacp': 'aac',
+  'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/vnd.wave': 'wav',
+  'audio/flac': 'flac', 'audio/x-flac': 'flac', 'audio/x-ms-wma': 'wma',
+  'audio/aiff': 'aiff', 'audio/x-aiff': 'aiff', 'audio/webm': 'weba', 'audio/amr': 'amr',
+  'audio/midi': 'mid',
+  'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/quicktime': 'mov', 'video/webm': 'webm',
+  'video/x-matroska': 'mkv', 'video/x-msvideo': 'avi', 'video/x-ms-wmv': 'wmv',
+  'video/mpeg': 'mpg', 'video/ogg': 'ogv', 'video/3gpp': '3gp', 'video/x-flv': 'flv',
+  'video/mp2t': 'ts',
+  // 'text/plain' is deliberately absent: misconfigured servers send it for audio files, and
+  // those must keep falling through to the URL extension or the default.
+  'application/pdf': 'pdf', 'application/epub+zip': 'epub',
+  'application/rtf': 'rtf', 'text/rtf': 'rtf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/csv': 'csv', 'application/x-subrip': 'srt', 'text/vtt': 'vtt',
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+  'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/tiff': 'tiff',
+  'application/zip': 'zip', 'application/x-zip-compressed': 'zip', 'application/vnd.rar': 'rar',
+  'application/x-rar-compressed': 'rar', 'application/x-7z-compressed': '7z',
+  'application/gzip': 'gz', 'application/x-gzip': 'gz', 'application/x-tar': 'tar'
+};
+/**
+ * URL "extensions" that name the server-side script producing the download rather than the type
+ * of the file itself (e.g. `download.php?id=7`). Never used as a file extension.
+ */
+const NON_FILE_URL_EXTENSIONS = [
+  'php', 'php5', 'asp', 'aspx', 'ashx', 'jsp', 'jspx', 'cgi', 'pl', 'py', 'rb', 'do', 'action',
+  'cfm', 'html', 'htm', 'xhtml', 'shtml', 'js', 'json', 'xml', 'rss', 'atom', 'com', 'net', 'org'
+];
 
 /**
  * Purpose: Structured lines in the Apps Script execution log (Executions) to trace where a run
@@ -665,30 +740,60 @@ function isEpisodeInQueue(episodeUrl) {
 }
 
 /**
- * Returns true if an audio file for this episode still exists in the podcast folder
- * (single file or first part of a chunked download).
+ * Purpose: Tell whether the file of this episode still exists in the podcast's Drive folder, so a
+ *   manual download can decide if the "already downloaded" flag is still true. Works for every
+ *   file type (audio, video, documents, ...), not only for a fixed list of extensions.
+ * Operation: The extension an episode was saved with is only known at download time and is not
+ *   stored anywhere, so the lookup must not depend on it:
+ *   1. Fast path – one exact-name lookup for the default `.mp3` name, which covers most episodes.
+ *   2. Otherwise lists the folder once and accepts any file that `isEpisodeFileName` recognizes as
+ *      this episode (the same base name under any extension).
+ *   Returns true on any Drive error, so a transient failure can never clear the flag and cause a
+ *   duplicate download.
  */
-function episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, pubDate, runT0) {
+function episodeFileExistsInDrive(podcastTitle, episodeTitle, pubDate, runT0) {
   try {
     debugStep(
-      'episodeAudioFilesExistInDrive',
+      'episodeFileExistsInDrive',
       debugSnippet(podcastTitle, 60) + ' / ' + debugSnippet(episodeTitle, 60),
       runT0
     );
     const folder = getPodcastFolder(podcastTitle || 'כללי');
     const d = pubDate instanceof Date ? pubDate : new Date(pubDate || Date.now());
-    const singleName = buildFileName(episodeTitle, d);
-    if (folder.getFilesByName(singleName).hasNext()) {
-      debugStep('episodeAudioFilesExistInDrive: found', singleName, runT0);
+    const defaultName = buildFileName(episodeTitle, d);
+    if (folder.getFilesByName(defaultName).hasNext()) {
+      debugStep('episodeFileExistsInDrive: found', defaultName, runT0);
       return true;
     }
-    const partName = buildFileName(episodeTitle, d, 1);
-    const hasPart = folder.getFilesByName(partName).hasNext();
-    debugStep('episodeAudioFilesExistInDrive: part1', partName + ' exists=' + hasPart, runT0);
-    return hasPart;
+    const it = folder.getFiles();
+    while (it.hasNext()) {
+      const name = it.next().getName();
+      if (isEpisodeFileName(name, episodeTitle, d)) {
+        debugStep('episodeFileExistsInDrive: found', name, runT0);
+        return true;
+      }
+    }
+    debugStep('episodeFileExistsInDrive: not found', defaultName, runT0);
+    return false;
   } catch (_) {
     return true;
   }
+}
+
+/**
+ * Purpose: Decide whether a filename found in a podcast folder belongs to the given episode,
+ *   whatever type of file the episode turned out to be.
+ * Operation: True when the name is exactly the episode's base name (`buildFileBaseName`) followed
+ *   by a single dot and an extension made only of letters and digits – the same shape
+ *   `buildFileName` produces. Requiring the extension to be the whole remainder keeps
+ *   "260601 Ep.mp3" from matching a different episode whose title merely starts the same way,
+ *   e.g. "260601 Ep. 2.mp3".
+ */
+function isEpisodeFileName(fileName, episodeTitle, pubDate) {
+  const name = String(fileName || '');
+  const prefix = buildFileBaseName(episodeTitle, pubDate) + '.';
+  if (name.indexOf(prefix) !== 0) return false;
+  return /^[a-z0-9]+$/i.test(name.slice(prefix.length));
 }
 
 /**
@@ -702,7 +807,7 @@ function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, d
   debugStep('syncDownloadedFlagWithDrive: check', debugSnippet(episodeTitle, 80), runT0);
   const d = pubDate instanceof Date ? pubDate : (pubDate ? new Date(pubDate) : new Date());
   if (isNaN(d.getTime())) return;
-  if (!episodeAudioFilesExistInDrive(podcastTitle, episodeTitle, d, runT0)) {
+  if (!episodeFileExistsInDrive(podcastTitle, episodeTitle, d, runT0)) {
     debugStep('syncDownloadedFlagWithDrive: unmark (missing file)', debugSnippet(url, 80), runT0);
     unmarkDownloaded(url, downloadedSet);
   }
@@ -746,16 +851,25 @@ function formatDateYYMMDD(date) {
 
 /**
  * Purpose: Build a safe, dated filename for a downloaded podcast episode.
- * Operation: Formats the publication date as YYMMDD, sanitizes the episode title, and appends the
- *   given file extension (defaults to 'mp3'). The partNum parameter is kept for backward
- *   compatibility with any callers that might still reference it, but is no longer used by the
- *   Resumable Upload path (which always creates a single complete file).
+ * Operation: Takes the dated base name from `buildFileBaseName` and appends the given file
+ *   extension (defaults to 'mp3'). The third argument is the extension, not a part number:
+ *   episodes are always stored as a single complete file.
  */
 function buildFileName(episodeTitle, pubDate, ext) {
+  const safeExt = (ext && /^[a-z0-9]+$/i.test(ext)) ? ext : DEFAULT_FILE_EXTENSION;
+  return `${buildFileBaseName(episodeTitle, pubDate)}.${safeExt}`;
+}
+
+/**
+ * Purpose: Build the part of an episode's filename that does not depend on its file type, so that
+ *   saving a file and later looking it up in Drive always agree on the name.
+ * Operation: Formats the publication date as YYMMDD and appends the sanitized episode title,
+ *   separated by a space. No extension and no trailing dot.
+ */
+function buildFileBaseName(episodeTitle, pubDate) {
   const dateStr = formatDateYYMMDD(pubDate || new Date());
   const safeTitle = sanitizeFileName(episodeTitle) || 'פרק';
-  const safeExt = (ext && /^[a-z0-9]+$/i.test(ext)) ? ext : 'mp3';
-  return `${dateStr} ${safeTitle}.${safeExt}`;
+  return `${dateStr} ${safeTitle}`;
 }
 
 // ============================================================
@@ -831,29 +945,69 @@ function getOAuthToken() {
 }
 
 /**
- * Purpose: Detect the correct file extension for a podcast episode.
- * Operation: Inspects the URL path first (most reliable), then falls back to the Content-Type
- *   header returned by an optional HEAD-like probe. Supports mp3, m4a, mp4, ogg, opus, aac, wav.
- *   Returns 'mp3' as default if detection fails.
+ * Purpose: Read the file extension written in a download URL, if it has one.
+ * Operation: Drops the scheme and host (so a bare domain such as "example.com" is never mistaken
+ *   for a file named "example" with extension "com"), the query string and the fragment, then
+ *   returns whatever follows the last dot of the last path segment, lowercased. Returns '' when
+ *   the path has no dot. The result is raw text – callers decide whether to trust it.
+ * @param {string} url - Episode download URL.
+ * @returns {string}   - Lowercase extension without the leading dot, or ''.
+ */
+function extractUrlExtension(url) {
+  const path = String(url || '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^\/?#]*/i, '')
+    .split('?')[0]
+    .split('#')[0]
+    .toLowerCase();
+  const lastSeg = path.split('/').pop() || '';
+  const dotIdx = lastSeg.lastIndexOf('.');
+  return dotIdx >= 0 ? lastSeg.slice(dotIdx + 1) : '';
+}
+
+/**
+ * Purpose: Read the MIME type a server declared for a response, in a form fit for table lookups.
+ * Operation: Takes the Content-Type header, cuts any parameters after ';' (e.g. "; charset=utf-8"),
+ *   trims and lowercases it. Returns '' when the header is missing.
+ * @param {Object} headers - Response headers object.
+ * @returns {string}       - Bare lowercase MIME type, or ''.
+ */
+function getResponseMimeType(headers) {
+  const raw = String(getHeaderCaseInsensitive(headers || {}, 'Content-Type') || '');
+  return raw.split(';')[0].trim().toLowerCase();
+}
+
+/**
+ * Purpose: Detect the correct file extension for a podcast episode of ANY file type – audio,
+ *   video, document, image, archive or anything else a feed links to – so the file is saved to
+ *   Drive under its real type instead of being forced to '.mp3'.
+ * Operation: Tries the following sources, most reliable first, and returns the first hit:
+ *   1. The URL extension, when it is a type listed in `MIME_TYPE_BY_EXTENSION`.
+ *   2. The server's Content-Type, matched exactly against `EXTENSION_BY_MIME_TYPE`.
+ *   3. The server's Content-Type, matched loosely by keyword (non-standard audio types).
+ *   4. The URL extension even though it is not a listed type, as long as it looks like a real
+ *      extension (2-5 letters/digits with at least one letter) and is not the name of a
+ *      server-side script (`NON_FILE_URL_EXTENSIONS`). This is what keeps unknown types intact.
+ *   5. `DEFAULT_FILE_EXTENSION` ('mp3') when nothing above could be determined.
  * @param {string} url          - Episode download URL.
  * @param {Object} [headers]    - Optional response headers object from a prior probe request.
  * @returns {string}            - Lowercase file extension without the leading dot.
  */
 function detectFileExtension(url, headers) {
-  const knownExts = ['mp3', 'm4a', 'mp4', 'ogg', 'opus', 'aac', 'wav'];
-  // 1. Try to read from URL path (strip query string first)
+  // 1. A URL extension of a known type is the most reliable signal
+  let urlExt = '';
   try {
-    const path = String(url || '').split('?')[0].split('#')[0].toLowerCase();
-    const lastSeg = path.split('/').pop() || '';
-    const dotIdx = lastSeg.lastIndexOf('.');
-    if (dotIdx >= 0) {
-      const ext = lastSeg.slice(dotIdx + 1);
-      if (knownExts.includes(ext)) return ext;
-    }
+    urlExt = extractUrlExtension(url);
   } catch (_) { /* ignore */ }
+  if (urlExt && Object.prototype.hasOwnProperty.call(MIME_TYPE_BY_EXTENSION, urlExt)) return urlExt;
 
-  // 2. Try Content-Type header
   if (headers) {
+    // 2. Exact Content-Type match
+    const mimeType = getResponseMimeType(headers);
+    if (mimeType && Object.prototype.hasOwnProperty.call(EXTENSION_BY_MIME_TYPE, mimeType)) {
+      return EXTENSION_BY_MIME_TYPE[mimeType];
+    }
+
+    // 3. Loose Content-Type match for non-standard audio types
     const ct = String(getHeaderCaseInsensitive(headers, 'Content-Type') || '').toLowerCase();
     if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('mpeg4')) return 'm4a';
     if (ct.includes('mp3') || ct.includes('mpeg')) return 'mp3';
@@ -863,7 +1017,12 @@ function detectFileExtension(url, headers) {
     if (ct.includes('wav')) return 'wav';
   }
 
-  return 'mp3'; // safe default
+  // 4. An unlisted URL extension still beats guessing, unless it names a server-side script
+  if (/^[a-z0-9]{2,5}$/.test(urlExt) && /[a-z]/.test(urlExt) && !NON_FILE_URL_EXTENSIONS.includes(urlExt)) {
+    return urlExt;
+  }
+
+  return DEFAULT_FILE_EXTENSION; // safe default
 }
 
 /**
@@ -973,29 +1132,6 @@ function queryResumableSessionProgress(sessionUrl) {
   throw new Error(`שאילתת מצב סשן ההעלאה נכשלה: HTTP ${code}`);
 }
 
-/**
- * Purpose: Download a podcast episode from its source URL and upload it to Google Drive as a
- *   single, complete file using the Drive Resumable Upload API.
- * Operation:
- *   1. Detects the correct file extension and MIME type from the URL / Content-Type header.
- *   2. Creates (or resumes) a Drive Resumable Upload session.
- *   3. Enters a loop: downloads CHUNK_SIZE bytes from the podcast server using a Range request,
- *      immediately uploads that chunk to the session URL with the correct Content-Range header,
- *      then releases the chunk from memory.
- *   4. For servers that do not advertise Content-Length the total size is sent as '*' for all
- *      intermediate chunks and only the real byte count on the final chunk.
- *   5. If the time budget is exceeded mid-loop, saves the session URL (and byte offset) to the
- *      job payload and throws TIME_BUDGET_EXCEEDED so the caller can reschedule.
- *   6. On success returns a single-element array identical in shape to the old downloadChunked
- *      return value: [{ fileId, fileName, driveUrl }].
- * @param {string}   episodeUrl   - Direct audio download URL.
- * @param {string}   episodeTitle - Episode title (used for the filename).
- * @param {Date}     pubDate      - Publication date (used for the filename date prefix).
- * @param {Folder}   folder       - Google Drive Folder object to upload into.
- * @param {string}   description  - Optional file description stored on the Drive file.
- * @param {Object}   [options]    - runT0, shouldStop(), resumeOffset, resumeSessionUrl.
- * @returns {Array<{fileId, fileName, driveUrl}>}
- */
 /**
  * Purpose: A modular engine to resolve bloat-URLs that crash UrlFetchApp (>2048 chars).
  * Triggered by the DFS Backtracking engine in fetchWithRedirects when UrlFetchApp throws an error.
@@ -1123,6 +1259,29 @@ function fetchWithRedirects(url, options, maxRedirects) {
   throw new Error(`חריגה ממספר ההפניות (Too many redirects) עבור: ${url}`);
 }
 
+/**
+ * Purpose: Download a podcast episode from its source URL and upload it to Google Drive as a
+ *   single, complete file using the Drive Resumable Upload API.
+ * Operation:
+ *   1. Detects the correct file extension and MIME type from the URL / Content-Type header.
+ *   2. Creates (or resumes) a Drive Resumable Upload session.
+ *   3. Enters a loop: downloads CHUNK_SIZE bytes from the podcast server using a Range request,
+ *      immediately uploads that chunk to the session URL with the correct Content-Range header,
+ *      then releases the chunk from memory.
+ *   4. For servers that do not advertise Content-Length the total size is sent as '*' for all
+ *      intermediate chunks and only the real byte count on the final chunk.
+ *   5. If the time budget is exceeded mid-loop, saves the session URL (and byte offset) to the
+ *      job payload and throws TIME_BUDGET_EXCEEDED so the caller can reschedule.
+ *   6. On success returns a single-element array identical in shape to the old downloadChunked
+ *      return value: [{ fileId, fileName, driveUrl }].
+ * @param {string}   episodeUrl   - Direct audio download URL.
+ * @param {string}   episodeTitle - Episode title (used for the filename).
+ * @param {Date}     pubDate      - Publication date (used for the filename date prefix).
+ * @param {Folder}   folder       - Google Drive Folder object to upload into.
+ * @param {string}   description  - Optional file description stored on the Drive file.
+ * @param {Object}   [options]    - runT0, shouldStop(), resumeOffset, resumeSessionUrl.
+ * @returns {Array<{fileId, fileName, driveUrl}>}
+ */
 function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, description, options) {
   const runT0 = options && options.runT0;
   const shouldStop = (options && typeof options.shouldStop === 'function') ? options.shouldStop : () => false;
@@ -1130,7 +1289,8 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
   // --- 1. Determine file extension and MIME type ---
   debugStep('downloadResumable: probe for extension/size', debugSnippet(episodeUrl, 120), runT0);
   let totalSize = null;
-  let ext = 'mp3';
+  let ext = DEFAULT_FILE_EXTENSION;
+  let probeMimeType = '';
   let directUrl = episodeUrl;
   try {
     const probeResult = fetchWithRedirects(episodeUrl, {
@@ -1145,13 +1305,17 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
     const fromCl = parseContentLength(probeHeaders);
     totalSize = fromRange !== null ? fromRange : fromCl;
     ext = detectFileExtension(directUrl, probeHeaders);
-    debugStep('downloadResumable: probe done', `size=${totalSize} ext=${ext}`, runT0);
+    probeMimeType = getResponseMimeType(probeHeaders);
+    debugStep('downloadResumable: probe done', `size=${totalSize} ext=${ext} type=${probeMimeType}`, runT0);
   } catch (e) {
     debugStep('downloadResumable: probe failed (continuing without size)', e.message || String(e), runT0);
   }
 
-  const mimeTypeMap = { mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'video/mp4', ogg: 'audio/ogg', opus: 'audio/ogg', aac: 'audio/aac', wav: 'audio/wav' };
-  const mimeType = mimeTypeMap[ext] || 'audio/mpeg';
+  // A listed extension decides the Drive MIME type. For any other file type, pass on what the
+  // server declared, and only as a last resort mark the file as generic binary data.
+  const mimeType = (Object.prototype.hasOwnProperty.call(MIME_TYPE_BY_EXTENSION, ext) && MIME_TYPE_BY_EXTENSION[ext])
+    || probeMimeType
+    || 'application/octet-stream';
   const fileName = buildFileName(episodeTitle, pubDate, ext);
   const token = getOAuthToken();
 
@@ -1597,7 +1761,7 @@ function downloadEpisode(episodeData) {
       manualDownload: true
     });
 
-    // Fire the worker immediately (1 ms delay = as soon as possible)
+    // Schedule the worker in 1 minute (shorter delays get throttled by the Apps Script scheduler)
     scheduleDownloadWorkerAfterMs(60 * 1000);
 
     debugStep(
