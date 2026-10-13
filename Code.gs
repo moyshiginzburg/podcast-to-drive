@@ -27,6 +27,21 @@ const PROP_ONE_TIME_TRIG = 'oneTimeTrigId';
 const PROP_DOWNLOAD_WORKER_TRIG = 'downloadWorkerTrigId';
 const DOWNLOAD_QUEUE_SHEET_NAME = 'תור הורדות';
 const DOWNLOAD_QUEUE_HEADERS = ['payload'];
+const FAILED_EPISODES_SHEET_NAME = 'פרקים שנכשלו';
+const FAILED_EPISODES_HEADERS = ['כתובת', 'הסכת', 'פרק', 'מספר כישלונות', 'שגיאה אחרונה', 'עדכון אחרון'];
+/**
+ * How many times in a row the worker re-attempts one queued episode after a temporary problem
+ * (network error, server 5xx / 429 / 408) before giving up on it for the current round.
+ * Attempts are one worker run apart, i.e. about a minute.
+ */
+const MAX_TRANSIENT_RETRIES = 5;
+/**
+ * How many failed download rounds an episode may accumulate before the automatic scan stops
+ * re-queuing it. A scan runs every 6 hours, so 12 rounds is about three days – long enough to
+ * outlast a server outage, short enough that a permanently dead episode does not fill the Log
+ * forever. A manual download from the sidebar resets the count.
+ */
+const MAX_EPISODE_FAILURES = 12;
 /**
  * Chunk size for the Resumable Upload loop: each iteration downloads this many bytes from the
  * podcast server and immediately streams them up to the Drive Resumable Upload session.
@@ -650,14 +665,18 @@ function saveDownloadedSet(set) {
   }
 }
 
+/**
+ * Purpose: Record that an episode was downloaded, without disturbing what other executions wrote
+ *   to the downloads sheet in the meantime.
+ * Operation: Appends the URL as one new row. It deliberately does NOT rewrite the whole list:
+ *   a scan (`podcastManager`) and the worker can run at the same time, and a "read everything,
+ *   then write everything back" update lets whichever finishes last erase the other's rows –
+ *   which made finished episodes download a second time. The optional in-memory set is updated
+ *   as well so the caller's own view stays current.
+ */
 function markDownloaded(url, set) {
-  if (set) {
-    set.add(url);
-    return;
-  }
-  const downloaded = getDownloadedSet();
-  downloaded.add(url);
-  saveDownloadedSet(downloaded);
+  if (set) set.add(url);
+  getDownloadsSheet().appendRow([url]);
 }
 
 function isDownloaded(url, set) {
@@ -726,17 +745,116 @@ function shiftDownloadQueue() {
  * @returns {boolean} - True if the URL exists in the queue, false otherwise.
  */
 function isEpisodeInQueue(episodeUrl) {
+  return getQueuedEpisodeUrls().has(episodeUrl);
+}
+
+/**
+ * Purpose: List every episode currently waiting in the download queue, so callers can avoid
+ *   adding the same episode twice.
+ * Operation: Reads all rows of the queue sheet once, parses each JSON payload and collects its
+ *   `episodeUrl` into a Set. Malformed rows are skipped.
+ * @returns {Set<string>} - Episode URLs present in the queue.
+ */
+function getQueuedEpisodeUrls() {
+  const urls = new Set();
   const sheet = ensureDownloadQueueSheet();
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return false;
+  if (lastRow < 2) return urls;
   const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
   for (let i = 0; i < values.length; i++) {
     try {
       const job = JSON.parse(String(values[i][0] || '').trim());
-      if (job && job.episodeUrl === episodeUrl) return true;
+      if (job && job.episodeUrl) urls.add(job.episodeUrl);
     } catch (_) { /* skip malformed rows */ }
   }
-  return false;
+  return urls;
+}
+
+// ============================================================
+// FAILED EPISODE TRACKING
+// ============================================================
+
+/**
+ * Purpose: Get the sheet that counts how many times each episode failed to download.
+ * Operation: Returns the existing sheet. When it does not exist yet it is created only if
+ *   `createIfMissing` is true, so users who never had a failure never see this sheet at all.
+ * @param {boolean} createIfMissing - Create the sheet (with headers) when it is absent.
+ * @returns {Sheet|null}
+ */
+function getFailedEpisodesSheet(createIfMissing) {
+  const existing = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(FAILED_EPISODES_SHEET_NAME);
+  if (existing || !createIfMissing) return existing || null;
+  return ensureSheetWithHeaders(FAILED_EPISODES_SHEET_NAME, FAILED_EPISODES_HEADERS);
+}
+
+/**
+ * Purpose: Find the row of one episode in the failed-episodes sheet.
+ * Operation: Scans the URL column and returns the 1-based sheet row and the current failure
+ *   count, or null when the episode has no record (or the sheet does not exist).
+ * @returns {{sheet: Sheet, rowIndex: number, count: number}|null}
+ */
+function findEpisodeFailureRow(episodeUrl) {
+  const sheet = getFailedEpisodesSheet(false);
+  if (!sheet) return null;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, FAILED_EPISODES_HEADERS.length).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0] || '').trim() === episodeUrl) {
+      return { sheet, rowIndex: i + 2, count: parseInt(values[i][3], 10) || 0 };
+    }
+  }
+  return null;
+}
+
+/**
+ * Purpose: Tell the automatic scan which episodes keep failing, so it can stop re-queuing an
+ *   episode that is dead for good (e.g. its file was removed from the podcast server).
+ * Operation: Reads the failed-episodes sheet once and returns a Map of episode URL -> number of
+ *   failed download rounds. Empty when the sheet does not exist.
+ * @returns {Map<string, number>}
+ */
+function getEpisodeFailureCounts() {
+  const counts = new Map();
+  const sheet = getFailedEpisodesSheet(false);
+  if (!sheet) return counts;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return counts;
+  const values = sheet.getRange(2, 1, lastRow - 1, FAILED_EPISODES_HEADERS.length).getValues();
+  values.forEach(row => {
+    const url = String(row[0] || '').trim();
+    if (url) counts.set(url, parseInt(row[3], 10) || 0);
+  });
+  return counts;
+}
+
+/**
+ * Purpose: Count one more failed download round for an episode.
+ * Operation: Called when the worker gives up on a queued episode and removes it from the queue.
+ *   Increments the episode's counter (creating its row on the first failure) and stores the
+ *   latest error text and time, which also lets the user see in the sheet what is failing.
+ * @returns {number} - The episode's failure count after this failure.
+ */
+function recordEpisodeFailure(episodeUrl, podcastTitle, episodeTitle, errorMessage) {
+  const note = String(errorMessage || '').slice(0, 300);
+  const found = findEpisodeFailureRow(episodeUrl);
+  if (found) {
+    const count = found.count + 1;
+    found.sheet.getRange(found.rowIndex, 4, 1, 3).setValues([[count, note, new Date()]]);
+    return count;
+  }
+  getFailedEpisodesSheet(true).appendRow([episodeUrl, podcastTitle || '', episodeTitle || '', 1, note, new Date()]);
+  return 1;
+}
+
+/**
+ * Purpose: Forget an episode's past failures – after it finally downloaded, or when the user asks
+ *   for it again by hand (which gives it a fresh set of automatic attempts).
+ * Operation: Deletes the episode's row from the failed-episodes sheet, if it has one.
+ */
+function clearEpisodeFailure(episodeUrl) {
+  const found = findEpisodeFailureRow(episodeUrl);
+  if (found) found.sheet.deleteRow(found.rowIndex);
 }
 
 /**
@@ -1043,6 +1161,45 @@ function downloadEpisodeToFolder(episodeUrl, episodeTitle, pubDate, folder, desc
   return downloadResumable(episodeUrl, episodeTitle, pubDate, folder, description, options);
 }
 
+/**
+ * Purpose: Tell a temporary server problem from a definite refusal, by HTTP status code.
+ * Operation: True for 408 (request timeout), 429 (too many requests) and every 5xx (the server
+ *   itself is failing). These usually pass on their own, so the request deserves a retry.
+ *   Everything else – 403, 404, 410 and so on – is a definite answer and retrying right away
+ *   would not change it.
+ * @param {number} code - HTTP status code.
+ * @returns {boolean}
+ */
+function isTransientHttpStatus(code) {
+  return code === 408 || code === 429 || (code >= 500 && code <= 599);
+}
+
+/**
+ * Purpose: Turn a failed Google Drive response into an Error the download worker knows how to
+ *   act on, instead of treating every Drive failure the same way.
+ * Operation: Builds an Error with a Hebrew message and flags it by what Drive reported:
+ *   - `isDriveFull`: 403 with reason `storageQuotaExceeded`. Nothing is wrong with the episode;
+ *     the worker pauses the whole queue until space is freed.
+ *   - `isNetworkRetryable`: a temporary status (see `isTransientHttpStatus`) or a 403 rate limit
+ *     (`rateLimitExceeded` / `userRateLimitExceeded`). The worker retries shortly.
+ *   - no flag: any other refusal; the worker counts it as a failed round for the episode.
+ * @param {number} code     - HTTP status code Drive returned.
+ * @param {string} bodyText - Response body (contains Drive's `reason`).
+ * @param {string} prefix   - Hebrew description of the step that failed.
+ * @returns {Error}
+ */
+function buildDriveHttpError(code, bodyText, prefix) {
+  const body = String(bodyText || '');
+  const lower = body.toLowerCase();
+  const err = new Error(`${prefix}: HTTP ${code} – ${body.slice(0, 200)}`);
+  if (code === 403 && lower.includes('storagequotaexceeded')) {
+    err.isDriveFull = true;
+  } else if (isTransientHttpStatus(code) || (code === 403 && lower.includes('ratelimitexceeded'))) {
+    err.isNetworkRetryable = true;
+  }
+  return err;
+}
+
 function getHeaderCaseInsensitive(headers, key) {
   const wanted = String(key || '').toLowerCase();
   const keys = Object.keys(headers || {});
@@ -1069,23 +1226,31 @@ function createResumableUploadSession(fileName, mimeType, folderId, description)
   const metadata = { name: fileName, mimeType, parents: [folderId] };
   if (description) metadata.description = description;
 
-  const resp = UrlFetchApp.fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
-    {
-      method: 'post',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Type': mimeType
-      },
-      payload: JSON.stringify(metadata),
-      muteHttpExceptions: true
-    }
-  );
+  let resp;
+  try {
+    resp = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      {
+        method: 'post',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': mimeType
+        },
+        payload: JSON.stringify(metadata),
+        muteHttpExceptions: true
+      }
+    );
+  } catch (e) {
+    // The request never got an answer (DNS, timeout, ...) – worth another attempt.
+    const err = new Error(`שגיאת רשת ביצירת סשן העלאה: ${e.message || String(e)}`);
+    err.isNetworkRetryable = true;
+    throw err;
+  }
 
   const code = resp.getResponseCode();
   if (code !== 200) {
-    throw new Error(`יצירת סשן העלאה נכשלה: HTTP ${code} – ${resp.getContentText().slice(0, 200)}`);
+    throw buildDriveHttpError(code, resp.getContentText(), 'יצירת סשן העלאה נכשלה');
   }
 
   const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
@@ -1398,6 +1563,7 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
     } catch (e) {
       const err = new Error(`שגיאת רשת בהורדת chunk ${chunkIndex}: ${e.message}`);
       err.isNetworkRetryable = true;
+      err.resumeSessionUrl = sessionUrl; // keep what Drive already received for the retry
       throw err;
     }
 
@@ -1459,7 +1625,14 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       chunkPayload = new Uint8Array(0);
     } else {
       downloadResp = null;
-      throw new Error(`HTTP ${downloadCode} בעת הורדת chunk ${chunkIndex} מהשרת`);
+      const err = new Error(`HTTP ${downloadCode} בעת הורדת chunk ${chunkIndex} מהשרת`);
+      // A podcast server that is overloaded or briefly down (5xx / 429 / 408) is as temporary as
+      // a network error and gets the same retries. 403 / 404 and the like are final for this round.
+      if (isTransientHttpStatus(downloadCode)) {
+        err.isNetworkRetryable = true;
+        err.resumeSessionUrl = sessionUrl;
+      }
+      throw err;
     }
 
     const isKnownTotal = totalSize !== null;
@@ -1504,6 +1677,7 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       }
       const err = new Error(`שגיאת רשת בהעלאת chunk ${chunkIndex} לדרייב: ${msg}`);
       err.isNetworkRetryable = true;
+      err.resumeSessionUrl = sessionUrl;
       throw err;
     }
     chunkPayload = null; // allow GC
@@ -1544,7 +1718,11 @@ function downloadResumable(episodeUrl, episodeTitle, pubDate, folder, descriptio
       chunkIndex++;
       continue;
     } else {
-      throw new Error(`HTTP ${uploadCode} בעת העלאת chunk ${chunkIndex} לדרייב: ${uploadResp.getContentText().slice(0, 200)}`);
+      const err = buildDriveHttpError(uploadCode, uploadResp.getContentText(), `שגיאה בהעלאת chunk ${chunkIndex} לדרייב`);
+      // Keep the session so a retry (or a resume after space is freed) continues from the bytes
+      // Drive already holds; `queryResumableSessionProgress` starts over if the session is gone.
+      err.resumeSessionUrl = sessionUrl;
+      throw err;
     }
   }
 
@@ -1750,6 +1928,10 @@ function downloadEpisode(episodeData) {
       debugStep('downloadEpisode (sidebar): already in queue', null, runT0);
       return { success: true, queued: true, alreadyQueued: true };
     }
+
+    // The user asked for this episode explicitly: forget earlier failures so it gets a full set
+    // of attempts again (also re-enables automatic retries if the scan had given up on it).
+    clearEpisodeFailure(episodeData.url);
 
     // Enqueue the job with manualDownload=true so the worker logs it as "הורד ידנית"
     enqueueDownloadJob({
@@ -2118,8 +2300,15 @@ function podcastManager() {
   const startTime = Date.now();
   const runT0 = startTime;
   debugStep('podcastManager: start', null, runT0);
+  // Read-only snapshots for this scan. The scan never writes the downloads sheet back: it does not
+  // change it, and rewriting a snapshot taken minutes ago would erase episodes the worker finished
+  // in the meantime (they would then be downloaded a second time).
   const downloadedSet = getDownloadedSet();
   debugStep('podcastManager: downloaded URL set', 'size=' + downloadedSet.size, runT0);
+  // Episodes already waiting in the queue (not re-queued) and how often each episode has failed.
+  const queuedUrls = getQueuedEpisodeUrls();
+  const failureCounts = getEpisodeFailureCounts();
+  debugStep('podcastManager: queue / failures', `queued=${queuedUrls.size} failing=${failureCounts.size}`, runT0);
   const shouldStop = () => Date.now() - startTime >= SOFT_STOP_MS;
   let stopRequested = false;
   let resumeTriggerScheduled = false;
@@ -2138,18 +2327,14 @@ function podcastManager() {
     debugStep('podcastManager: no resume state', null, runT0);
   }
 
-  const checkpointProgress = (state, persistDownloads) => {
-    debugStep('podcastManager: checkpoint', (persistDownloads ? 'persist ' : '') + debugSnippet(JSON.stringify(state), 200), runT0);
+  const checkpointProgress = (state) => {
+    debugStep('podcastManager: checkpoint', debugSnippet(JSON.stringify(state), 200), runT0);
     props.setProperty(PROP_RESUME, JSON.stringify(state));
-    if (persistDownloads) {
-      saveDownloadedSet(downloadedSet);
-      debugStep('podcastManager: saveDownloadedSet done', 'size=' + downloadedSet.size, runT0);
-    }
   };
 
-  const requestSoftStop = (state, persistDownloads) => {
+  const requestSoftStop = (state) => {
     debugStep('podcastManager: requestSoftStop (soft time budget)', debugSnippet(JSON.stringify(state), 250), runT0);
-    checkpointProgress(state, persistDownloads);
+    checkpointProgress(state);
     if (!resumeTriggerScheduled) {
       ensureOneTimeTrigger(RESUME_TRIGGER_DELAY_MS);
       resumeTriggerScheduled = true;
@@ -2163,7 +2348,6 @@ function podcastManager() {
   debugStep('podcastManager: active subscriptions', 'count=' + subEntries.length, runT0);
   if (subEntries.length === 0) {
     debugStep('podcastManager: exit (no subscriptions)', null, runT0);
-    saveDownloadedSet(downloadedSet);
     props.deleteProperty(PROP_RESUME);
     deleteOneTimeTrigger();
     if (getDownloadQueueLength() > 0) {
@@ -2201,7 +2385,7 @@ function podcastManager() {
       runT0
     );
     if (shouldStop()) {
-      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 }, false);
+      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
       break;
     }
 
@@ -2224,7 +2408,7 @@ function podcastManager() {
       continue;
     }
     if (shouldStop()) {
-      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 }, false);
+      requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: 0 });
       break;
     }
 
@@ -2233,7 +2417,7 @@ function podcastManager() {
 
       // ── Time check ──────────────────────────────────────────
       if (shouldStop()) {
-        requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei, episodeUrl: ep.url }, false);
+        requestSoftStop({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei, episodeUrl: ep.url });
         break;
       }
 
@@ -2247,7 +2431,20 @@ function podcastManager() {
       // No syncDownloadedFlagWithDrive here — auto skips by URL sheet alone (see comment on syncDownloadedFlagWithDrive).
       if (isDownloaded(ep.url, downloadedSet)) {
         debugStep('podcastManager: skip (already downloaded)', debugSnippet(ep.url, 100), runT0);
-        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 });
+        continue;
+      }
+      // Already waiting in the queue (e.g. the queue is paused because Drive is full, or the worker
+      // has not reached it yet): queuing it again would only pile up duplicate rows.
+      if (queuedUrls.has(ep.url)) {
+        debugStep('podcastManager: skip (already in queue)', debugSnippet(ep.url, 100), runT0);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 });
+        continue;
+      }
+      // Failed in too many rounds: stop retrying automatically. A manual download resets this.
+      if ((failureCounts.get(ep.url) || 0) >= MAX_EPISODE_FAILURES) {
+        debugStep('podcastManager: skip (gave up after repeated failures)', debugSnippet(ep.url, 100), runT0);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 });
         continue;
       }
 
@@ -2259,9 +2456,10 @@ function podcastManager() {
           pubDate: pubDate.toISOString(),
           description: ep.description || ''
         });
+        queuedUrls.add(ep.url);
         debugStep('podcastManager: enqueued episode', debugSnippet(ep.title, 80), runT0);
         resumeState = null;
-        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 });
       } catch (e) {
         debugStep('podcastManager: enqueue error', (e.message || String(e)).slice(0, 200), runT0);
         const msg = e.message || '';
@@ -2271,11 +2469,11 @@ function podcastManager() {
           break;
         }
         writeLog(subData.title, ep.title, 'שגיאה', msg);
-        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 }, false);
+        checkpointProgress({ podcastUrl: rssUrl, podcastIndex: pi, episodeIndex: ei + 1 });
       }
     }
     if (stopRequested) break;
-    checkpointProgress({ podcastIndex: pi + 1, episodeIndex: 0 }, false);
+    checkpointProgress({ podcastIndex: pi + 1, episodeIndex: 0 });
   }
 
   if (stopRequested) {
@@ -2286,11 +2484,9 @@ function podcastManager() {
     return;
   }
 
-  // 3. Save updated metadata and downloaded URL set
+  // 3. Save updated metadata
   debugStep('podcastManager: syncActiveSubscriptionsMetadata', null, runT0);
   syncActiveSubscriptionsMetadata(subs);
-  saveDownloadedSet(downloadedSet);
-  debugStep('podcastManager: final saveDownloadedSet', 'size=' + downloadedSet.size, runT0);
 
   // 4. Run completed – clear resume state and update last successful auto-run timestamp
   props.deleteProperty(PROP_RESUME);
@@ -2308,8 +2504,18 @@ function podcastManager() {
 /**
  * Purpose: Drain one queued episode download per execution to isolate parser memory from downloader
  * memory and avoid V8 OOM spikes in a single run.
- * Operation: Reads one queue item, downloads it with existing engine (supports chunk resume),
- * updates log/download set, and schedules itself again while items remain.
+ * Operation: Reads the head of the queue, downloads it with the resumable engine, records the
+ *   result and schedules itself again while items remain. What happens on failure depends on
+ *   the kind of failure:
+ *   - Time budget exceeded: saves the upload position and continues in the next run.
+ *   - Drive is full: nothing is wrong with the episode. The queue is left untouched and the
+ *     worker is NOT rescheduled, so one Log row is written instead of one per waiting episode;
+ *     the next scan (or manual download) starts the worker again.
+ *   - Temporary problem (network error, server 5xx / 429 / 408): retried in the next run, up to
+ *     `MAX_TRANSIENT_RETRIES` times.
+ *   - Anything else, or retries exhausted: the episode leaves the queue and one failed round is
+ *     counted for it (`recordEpisodeFailure`). The next scan queues it again, until it has
+ *     failed `MAX_EPISODE_FAILURES` rounds – then the scan stops trying.
  */
 function downloadWorker() {
   const runT0 = Date.now();
@@ -2331,7 +2537,6 @@ function downloadWorker() {
   if (isDownloaded(job.episodeUrl, downloadedSet)) {
     debugStep('downloadWorker: skip downloaded', debugSnippet(job.episodeUrl, 100), runT0);
     shiftDownloadQueue();
-    saveDownloadedSet(downloadedSet);
     if (getDownloadQueueLength() > 0) scheduleDownloadWorkerAfterMs(60 * 1000);
     return;
   }
@@ -2352,7 +2557,7 @@ function downloadWorker() {
       }
     );
     markDownloaded(job.episodeUrl, downloadedSet);
-    saveDownloadedSet(downloadedSet);
+    clearEpisodeFailure(job.episodeUrl);
     const link = results.map(r => r.driveUrl).join('\n');
     // Respect the manualDownload flag set by downloadEpisode (sidebar) to log correctly
     const logStatus = job.manualDownload ? 'הורד ידנית' : 'הורד אוטומטית';
@@ -2368,26 +2573,36 @@ function downloadWorker() {
       job.networkRetries = 0; // Reset retries on successful soft-stop progress
       updateDownloadQueueHead(job);
       debugStep('downloadWorker: soft-stop resume saved', debugSnippet(JSON.stringify(job), 200), runT0);
+    } else if (e && e.isDriveFull) {
+      // Not the episode's fault, and every other queued episode would fail the same way. Keep the
+      // queue as it is and stop here; the next scan or manual download restarts the worker.
+      if (e.resumeSessionUrl !== undefined) {
+        job.resumeSessionUrl = e.resumeSessionUrl;
+        updateDownloadQueueHead(job);
+      }
+      writeLog(podcastTitle, job.episodeTitle || 'פרק', 'שגיאה',
+        `האחסון ב-Drive מלא. ההורדות מושהות (${getDownloadQueueLength()} פרקים ממתינים בתור) ויתחדשו אוטומטית בבדיקה הבאה לאחר שיתפנה מקום.`);
+      deleteDownloadWorkerTrigger();
+      debugStep('downloadWorker: Drive full – queue paused', 'queue=' + getDownloadQueueLength(), runT0);
+      return;
     } else if (e && e.isNetworkRetryable) {
       job.networkRetries = (job.networkRetries || 0) + 1;
       const msg = e.message || String(e);
-      if (job.networkRetries <= 5) {
+      if (job.networkRetries <= MAX_TRANSIENT_RETRIES) {
+        // Keep the Drive session (when the error carries one) so the retry resumes the upload.
+        if (e.resumeSessionUrl !== undefined) job.resumeSessionUrl = e.resumeSessionUrl;
         updateDownloadQueueHead(job);
-        writeLog(podcastTitle, job.episodeTitle || 'פרק', 'אזהרה', `שגיאת רשת זמנית, ניסיון ${job.networkRetries} מתוך 5. ממתין לריצה הבאה... (${msg})`);
-        debugStep('downloadWorker: network error retry scheduled', `retries=${job.networkRetries}`, runT0);
+        writeLog(podcastTitle, job.episodeTitle || 'פרק', 'אזהרה', `שגיאה זמנית, ניסיון ${job.networkRetries} מתוך ${MAX_TRANSIENT_RETRIES}. ממתין לריצה הבאה... (${msg})`);
+        debugStep('downloadWorker: temporary error, retry scheduled', `retries=${job.networkRetries}`, runT0);
       } else {
-        writeLog(podcastTitle, job.episodeTitle || 'פרק', 'שגיאה', `נכשל סופית לאחר 5 ניסיונות עקב שגיאות רשת. ${msg}`);
-        shiftDownloadQueue();
-        debugStep('downloadWorker: failed permanently after retries', debugSnippet(msg, 180), runT0);
+        failEpisodeRound(job, podcastTitle, `נכשל לאחר ${MAX_TRANSIENT_RETRIES} ניסיונות חוזרים עקב שגיאה זמנית. ${msg}`, runT0);
       }
     } else {
       const msg = e && e.message ? e.message : String(e);
       const note = (msg.includes('Range requests') || msg.includes('מגבלת UrlFetch'))
         ? 'לא ניתן להוריד – הקובץ גדול מדי והשרת אינו תומך בחלוקה לחלקים (Range)'
         : msg;
-      writeLog(podcastTitle, job.episodeTitle || 'פרק', 'שגיאה', note);
-      shiftDownloadQueue();
-      debugStep('downloadWorker: failed and removed from queue', debugSnippet(note, 180), runT0);
+      failEpisodeRound(job, podcastTitle, note, runT0);
     }
   }
 
@@ -2398,6 +2613,24 @@ function downloadWorker() {
     deleteDownloadWorkerTrigger();
     debugStep('downloadWorker: done (queue empty)', null, runT0);
   }
+}
+
+/**
+ * Purpose: Close a failed download round for the episode at the head of the queue.
+ * Operation: Writes the error to the Log, counts one more failed round for the episode and
+ *   removes it from the queue. When the count reaches `MAX_EPISODE_FAILURES` a second Log row
+ *   tells the user that automatic retries have stopped and how to try again.
+ */
+function failEpisodeRound(job, podcastTitle, note, runT0) {
+  const episodeTitle = job.episodeTitle || 'פרק';
+  writeLog(podcastTitle, episodeTitle, 'שגיאה', note);
+  const failures = recordEpisodeFailure(job.episodeUrl, podcastTitle, episodeTitle, note);
+  if (failures === MAX_EPISODE_FAILURES) {
+    writeLog(podcastTitle, episodeTitle, 'שגיאה',
+      `ההורדה נכשלה ${MAX_EPISODE_FAILURES} פעמים ברצף ולכן לא תנוסה שוב אוטומטית. אפשר לנסות שוב ידנית מתוך מנהל ההסכתים.`);
+  }
+  shiftDownloadQueue();
+  debugStep('downloadWorker: failed and removed from queue', `failures=${failures} ` + debugSnippet(note, 160), runT0);
 }
 
 function getLastAutoRunLabel() {

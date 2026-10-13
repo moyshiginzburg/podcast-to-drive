@@ -81,6 +81,7 @@ If you want to deploy the code yourself or contribute:
 | Sheet **`הורדות`** | Downloaded episode URLs (`כתובת`) |
 | Sheet **`Log`** | Columns: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` |
 | Sheet **`תור הורדות`** | Internal queue for the background downloader |
+| Sheet **`פרקים שנכשלו`** | Episodes that failed to download and how many times (appears only after a first failure); automatic retries stop after 12 failed rounds |
 | Sheet **`הגדרות`** | User preferences, like podcast sorting order |
 | Script **Properties** | `autoDownloadEnabled`, `lastRunTime`, `resumeState`, `oneTimeTrigId`, `downloadWorkerTrigId`, `autoOpmlTrigId` |
 | Drive **OPML Backup** | An OPML backup of your subscriptions |
@@ -172,6 +173,7 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 | גיליון **`הורדות`** | קישורי הפרקים שכבר ירדו כדי למנוע כפילויות (`כתובת`) |
 | גיליון **`Log`** | יומן המערכת: `תאריך`, `הסכת`, `פרק`, `סטטוס`, `הערה`, `קישור` ישיר לקובץ |
 | גיליון **`תור הורדות`** | תור פנימי המנהל את הורדות הרקע של הפרקים |
+| גיליון **`פרקים שנכשלו`** | פרקים שההורדה שלהם נכשלה ומספר הכישלונות (נוצר רק לאחר כישלון ראשון); לאחר 12 סבבים כושלים המערכת מפסיקה לנסות אוטומטית |
 | גיליון **`הגדרות`** | הגדרות המערכת (כמו אופן מיון ההסכתים) |
 | מאפייני סקריפט | משתני מערכת: `autoDownloadEnabled`, `lastRunTime`, `resumeState`, `oneTimeTrigId`, `downloadWorkerTrigId`, `autoOpmlTrigId` |
 | כונן Drive **גיבוי OPML** | עותק גיבוי של המנויים שלכם |
