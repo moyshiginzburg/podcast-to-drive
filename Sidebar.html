@@ -9,7 +9,7 @@
 
   body {
     font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     background: #f8f9fa;
     color: #202124;
     height: 100vh;
@@ -17,6 +17,7 @@
     flex-direction: column;
     overflow: hidden;
   }
+  button, input, select { font-family: inherit; }
 
   /* ── Header ── */
   #header {
@@ -25,28 +26,60 @@
     padding: 8px 10px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-shrink: 0;
   }
   #header-title {
     font-weight: 600;
-    font-size: 14px;
+    font-size: 16px;
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .hdr-btn {
+    display: inline-block;
     background: rgba(255,255,255,0.18);
     border: none;
     color: #fff;
     border-radius: 4px;
-    padding: 4px 7px;
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
+    text-decoration: none;
   }
-  .hdr-btn:hover { background: rgba(255,255,255,0.32); }
+  .hdr-btn:hover { background: rgba(255,255,255,0.32); text-decoration: none; }
+  .hdr-btn[hidden] { display: none; }
+
+  /* ── "More options" menu ── */
+  #more-wrap { position: relative; }
+  #more-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    padding: 4px 0;
+    z-index: 50;
+  }
+  #more-menu.visible { display: block; }
+  .menu-item {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 9px 14px;
+    font-size: 14px;
+    color: #202124;
+    text-align: right;
+    cursor: pointer;
+  }
+  .menu-item:hover { background: #e8f0fe; }
 
   /* ── Content area ── */
   #content {
@@ -63,43 +96,43 @@
   .back-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 8px;
   }
   .back-btn {
-    background: none;
-    border: 1px solid #ccc;
+    background: #fff;
+    border: 1px solid #dadce0;
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 5px 12px;
     cursor: pointer;
-    font-size: 12px;
-    color: #555;
+    font-size: 13px;
+    color: #3c4043;
   }
   .back-btn:hover { background: #e8eaed; }
   .screen-title {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 15px;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  /* ── Search bar ── */
+  /* ── Search bar (always visible) ── */
   #search-bar {
-    display: none;
-    padding: 6px 10px;
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
     background: #fff;
     border-bottom: 1px solid #e0e0e0;
     flex-shrink: 0;
   }
-  #search-bar.visible { display: flex; gap: 6px; }
   #search-input {
     flex: 1;
-    border: 1px solid #ccc;
+    border: 1px solid #9aa0a6;
     border-radius: 4px;
-    padding: 5px 8px;
-    font-size: 13px;
+    padding: 7px 10px;
+    font-size: 14px;
     outline: none;
   }
   #search-input:focus { border-color: #1a73e8; }
@@ -108,9 +141,9 @@
     color: #fff;
     border: none;
     border-radius: 4px;
-    padding: 5px 10px;
+    padding: 7px 16px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 14px;
   }
   .search-go-btn:hover { background: #1558b0; }
 
@@ -119,12 +152,27 @@
     background: #e8f0fe;
     color: #1558b0;
     border-bottom: 1px solid #d2e3fc;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     flex-shrink: 0;
   }
 
   /* ── Podcast list ── */
+  .sort-row[hidden] { display: none; }
+  .sort-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 0 8px;
+  }
+  #podcast-sort-select {
+    font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid #9aa0a6;
+    background: #fff;
+    outline: none;
+    cursor: pointer;
+  }
   #podcasts-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -141,53 +189,103 @@
   .podcast-main-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 8px;
     cursor: pointer;
-    min-height: 56px;
+    min-height: 60px;
     box-sizing: border-box;
     transition: background 0.1s;
     border-radius: 6px;
   }
   .podcast-main-row:hover { background: #e8f0fe; }
   .podcast-thumb {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 5px;
     object-fit: cover;
     flex-shrink: 0;
     background: #d2e3fc;
   }
   .podcast-thumb-placeholder {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 5px;
     background: #d2e3fc;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 20px;
     flex-shrink: 0;
   }
   .podcast-name {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1.3;
     flex: 1;
     word-break: break-word;
   }
-  .podcast-remove {
-    background: none;
-    border: none;
-    color: #bbb;
-    font-size: 16px;
+  .remove-btn {
+    background: #fff;
+    border: 1px solid #dadce0;
+    color: #5f6368;
+    font-size: 12px;
     cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
+    padding: 4px 12px;
+    border-radius: 4px;
     flex-shrink: 0;
-    border-radius: 3px;
   }
-  .podcast-remove:hover { color: #d93025; background: #fce8e6; }
+  .remove-btn:hover { color: #b3261e; border-color: #b3261e; background: #fce8e6; }
+
+  /* Inline "are you sure?" row that replaces the card footer while removing a podcast */
+  .remove-confirm {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #fce8e6;
+    border-radius: 0 0 6px 6px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .remove-confirm-text { flex: 1 1 100%; color: #3c4043; }
+  .podcast-item.confirming .pod-desc-footer { display: none; }
+  .podcast-item.confirming .remove-confirm { display: flex; }
+  .remove-yes {
+    background: #b3261e;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .remove-yes:disabled { opacity: 0.7; cursor: default; }
+  .remove-no {
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 5px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ── Bar above the episode list: is this podcast in the user's list? ── */
+  .sub-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .sub-bar-text { flex: 1 1 260px; }
+  .sub-bar.subscribed { background: #e6f4ea; color: #137333; }
+  .sub-bar.not-subscribed { background: #fef7e0; color: #3c4043; border: 1px solid #f9e3a3; }
+  .sub-bar.confirming { background: #fce8e6; color: #3c4043; }
 
   /* ── Episode list ── */
   .episode-item {
@@ -209,21 +307,21 @@
   }
   .episode-title {
     font-weight: 500;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.4;
     margin-bottom: 0;
     flex: 1;
   }
   .episode-date {
-    font-size: 11px;
-    color: #888;
+    font-size: 12px;
+    color: #5f6368;
     margin-bottom: 0;
     white-space: nowrap;
   }
   .episode-desc {
-    font-size: 11px;
-    color: #555;
-    line-height: 1.4;
+    font-size: 13px;
+    color: #3c4043;
+    line-height: 1.5;
     display: none;
     margin-bottom: 6px;
   }
@@ -231,11 +329,23 @@
   .episode-footer {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     padding: 0 10px 8px;
   }
+  .episode-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: auto;
+  }
+  .episode-status {
+    font-size: 12px;
+    font-weight: 600;
+    color: #137333;
+    white-space: nowrap;
+  }
   .desc-toggle {
-    font-size: 11px;
+    font-size: 12px;
     color: #1a73e8;
     cursor: pointer;
     background: none;
@@ -244,78 +354,103 @@
     text-decoration: underline;
   }
   .download-btn {
-    margin-right: auto;
     background: #1a73e8;
     color: #fff;
-    border: none;
+    border: 1px solid #1a73e8;
     border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 11px;
+    padding: 5px 12px;
+    font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
   }
   .download-btn:hover:not(:disabled) { background: #1558b0; }
-  .download-btn:disabled { opacity: 0.6; cursor: default; }
-  .download-btn.success { background: #1e8e3e; }
-  .download-btn.error { background: #d93025; }
+  .download-btn:disabled { opacity: 0.75; cursor: default; }
+  .download-btn.secondary { background: #fff; color: #1a73e8; }
+  .download-btn.secondary:hover:not(:disabled) { background: #e8f0fe; }
+  .download-btn.success { background: #188038; border-color: #188038; color: #fff; }
+  .download-btn.success:disabled { opacity: 1; }
+  .download-btn.error { background: #b3261e; border-color: #b3261e; color: #fff; }
+  .download-btn.error:hover:not(:disabled) { background: #8c1d18; }
 
   /* ── Search results ── */
   .result-item {
     display: flex;
     flex-direction: column;
-    border-bottom: 1px solid #efefef;
+    border-bottom: 1px solid #e0e0e0;
   }
   .result-main-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 6px;
+    gap: 10px;
+    padding: 8px 6px;
     box-sizing: border-box;
   }
   .pod-desc-container {
     padding: 0 10px 8px;
-    font-size: 11px;
-    color: #555;
-    line-height: 1.4;
+    font-size: 13px;
+    color: #3c4043;
+    line-height: 1.5;
     display: none;
     border-top: 1px solid #efefef;
     margin-top: 0;
     padding-top: 8px;
     word-wrap: break-word;
   }
-  .pod-desc-container a { color: #1a73e8; }
   .pod-desc-container.visible { display: block; }
+
+  /* ── Descriptions rebuilt by renderRichText (paragraphs, list items, links) ── */
+  .episode-desc, .pod-desc-content { overflow-wrap: anywhere; }
+  .episode-desc a, .pod-desc-content a { color: #1a73e8; text-decoration: underline; }
+  .rt-block { margin-bottom: 6px; }
+  .rt-block:last-child { margin-bottom: 0; }
+  .rt-item::before { content: "• "; }
+  .pod-site-link { display: inline-block; margin-top: 6px; }
   .pod-desc-footer {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
+    gap: 8px;
     padding: 0 10px 8px;
   }
   .result-thumb {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 5px;
     object-fit: cover;
     flex-shrink: 0;
     background: #e8eaed;
   }
+  /* Clickable part of a search result: opens that podcast's episode list */
+  .result-open {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .result-open:hover { background: #e8f0fe; }
   .result-info { flex: 1; overflow: hidden; }
-  .result-name { font-size: 12px; font-weight: 500; line-height: 1.3; }
-  .result-artist { font-size: 11px; color: #888; }
+  .result-name { font-size: 14px; font-weight: 500; line-height: 1.3; }
+  .result-artist { font-size: 12px; color: #5f6368; }
   .subscribe-btn {
     background: #1a73e8;
     color: #fff;
     border: none;
     border-radius: 4px;
-    padding: 4px 9px;
-    font-size: 11px;
+    padding: 6px 16px;
+    font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .subscribe-btn:hover:not(:disabled) { background: #1558b0; }
-  .subscribe-btn.subscribed { background: #1e8e3e; cursor: default; }
-  .subscribe-btn:disabled { opacity: 0.7; cursor: default; }
+  .subscribe-btn.subscribed { background: #188038; cursor: default; }
+  .subscribe-btn:disabled { opacity: 0.8; cursor: default; }
+  .subscribe-btn.subscribed:disabled { opacity: 1; }
 
   /* ── Modal backdrops (RSS + OPML) ── */
   #rss-modal,
@@ -335,45 +470,46 @@
     border-radius: 8px;
     padding: 16px;
     width: 90%;
-    max-width: 340px;
+    max-width: 400px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   }
-  .modal-title { font-weight: 600; margin-bottom: 10px; font-size: 14px; }
-  .modal-textarea {
-    width: 100%;
-    height: 140px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 6px;
-    font-size: 11px;
-    resize: vertical;
-    font-family: monospace;
-    outline: none;
-  }
-  .modal-textarea:focus { border-color: #1a73e8; }
+  .modal-title { font-weight: 600; margin-bottom: 10px; font-size: 16px; }
+  .modal-hint { font-size: 13px; color: #3c4043; margin-bottom: 8px; line-height: 1.5; }
   .modal-text-input {
     width: 100%;
-    border: 1px solid #ccc;
+    border: 1px solid #9aa0a6;
     border-radius: 4px;
     padding: 8px;
-    font-size: 13px;
+    font-size: 14px;
     outline: none;
     box-sizing: border-box;
   }
   .modal-text-input:focus { border-color: #1a73e8; }
+  .modal-file-input { width: 100%; font-size: 13px; margin-bottom: 10px; }
+  .modal-drive-section {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #e8f0fe;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1558b0;
+    line-height: 1.5;
+  }
+  .modal-error { display: none; margin: 10px 0 0; }
+  .modal-error.visible { display: block; }
   .modal-actions {
     display: flex;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 12px;
     justify-content: flex-end;
   }
   .modal-cancel {
     background: #f8f9fa;
     border: 1px solid #dadce0;
     border-radius: 4px;
-    padding: 5px 12px;
+    padding: 6px 14px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
   }
   .modal-cancel:hover { background: #e8eaed; }
   .modal-confirm {
@@ -381,18 +517,19 @@
     color: #fff;
     border: none;
     border-radius: 4px;
-    padding: 5px 12px;
+    padding: 6px 14px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
   }
-  .modal-confirm:hover { background: #1558b0; }
+  .modal-confirm:hover:not(:disabled) { background: #1558b0; }
+  .modal-confirm:disabled { opacity: 0.7; cursor: default; }
 
   /* ── Misc ── */
   .empty-msg {
     text-align: center;
-    color: #888;
-    padding: 24px 10px;
-    font-size: 12px;
+    color: #5f6368;
+    padding: 28px 16px;
+    font-size: 14px;
     line-height: 1.8;
   }
   .spinner {
@@ -409,12 +546,53 @@
   .notice {
     padding: 8px 10px;
     border-radius: 5px;
-    font-size: 12px;
+    font-size: 13px;
+    line-height: 1.5;
     margin-bottom: 8px;
   }
   .notice.success { background: #e6f4ea; color: #137333; }
-  .notice.error   { background: #fce8e6; color: #d93025; }
+  .notice.error   { background: #fce8e6; color: #b3261e; }
   .notice.info    { background: #e8f0fe; color: #1558b0; }
+  .notice a { color: inherit; text-decoration: underline; }
+  .error-detail { font-size: 11px; margin-top: 3px; opacity: 0.85; word-break: break-word; text-align: right; }
+
+  /* Error shown in place of a list that failed to load, with a retry button */
+  .load-error { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+  .load-error .notice-text { flex: 1; }
+  .retry-btn, .notice-close {
+    background: #fff;
+    border: 1px solid currentColor;
+    color: inherit;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* ── Message bar above the footer (sits above the modals so it stays readable) ── */
+  #global-banner { flex-shrink: 0; position: relative; z-index: 200; }
+  #global-banner .notice {
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-top: 1px solid rgba(0,0,0,0.12);
+  }
+  #global-banner .notice-text { flex: 1; }
+
+  #footer {
+    text-align: center;
+    padding: 5px;
+    font-size: 11px;
+    color: #5f6368;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  #footer a { color: #5f6368; }
+  #footer .help-link { font-size: 12px; color: #1a73e8; }
 
   a { color: #1a73e8; text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -425,15 +603,20 @@
 <!-- ══ Header ══════════════════════════════════════════════ -->
 <div id="header">
   <span id="header-title">🎙 הסכתים</span>
-  <button class="hdr-btn" id="btn-search-toggle" title="חיפוש הסכתים">🔍</button>
-  <button class="hdr-btn" id="btn-add-rss" title="הוסף מכתובת RSS">🔗</button>
-  <button class="hdr-btn" id="btn-import-opml" title="ייבוא OPML">📥</button>
-  <button class="hdr-btn" id="btn-export-opml" title="ייצוא OPML">📤</button>
+  <a class="hdr-btn" id="btn-open-drive" target="_blank" hidden>📁 פתיחת התיקייה בדרייב</a>
+  <div id="more-wrap">
+    <button class="hdr-btn" id="btn-more" aria-haspopup="true" aria-expanded="false">עוד אפשרויות ▾</button>
+    <div id="more-menu">
+      <button class="menu-item" id="btn-add-rss">הוספה לפי כתובת (RSS)</button>
+      <button class="menu-item" id="btn-import-opml">שחזור הרשימה מגיבוי</button>
+      <button class="menu-item" id="btn-export-opml">גיבוי הרשימה עכשיו</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ Search bar ═══════════════════════════════════════════ -->
 <div id="search-bar">
-  <input type="text" id="search-input" placeholder="חפש הסכת...">
+  <input type="text" id="search-input" placeholder="חיפוש הסכת">
   <button class="search-go-btn" id="btn-search-go">חפש</button>
 </div>
 <div id="status-strip">הורדה אוטומטית אחרונה: טרם בוצעה</div>
@@ -443,8 +626,8 @@
 
   <!-- Screen: Podcast list -->
   <div id="screen-podcasts" class="screen active">
-    <div style="display: flex; justify-content: flex-end; padding: 0px 10px 10px 10px;">
-      <select id="podcast-sort-select" style="font-size: 11px; padding: 3px 6px; border-radius: 4px; border: 1px solid #ccc; background: white; outline: none; cursor: pointer;">
+    <div class="sort-row" id="sort-row" hidden>
+      <select id="podcast-sort-select">
         <option value="default">מיין לפי סדר הוספה</option>
         <option value="name">מיין לפי שם (א-ת)</option>
       </select>
@@ -455,16 +638,17 @@
   <!-- Screen: Episode list -->
   <div id="screen-episodes" class="screen">
     <div class="back-bar">
-      <button class="back-btn" id="btn-back-podcasts">← חזרה</button>
+      <button class="back-btn" id="btn-back-episodes">→ חזרה</button>
       <span class="screen-title" id="episodes-podcast-title"></span>
     </div>
+    <div class="sub-bar" id="episodes-sub-bar"></div>
     <div id="episodes-list"></div>
   </div>
 
   <!-- Screen: Search results -->
   <div id="screen-search" class="screen">
     <div class="back-bar">
-      <button class="back-btn" id="btn-back-search">← חזרה</button>
+      <button class="back-btn" id="btn-back-search">→ חזרה</button>
       <span class="screen-title">תוצאות חיפוש</span>
     </div>
     <div id="search-results-list"></div>
@@ -472,14 +656,21 @@
 
 </div>
 
-<div style="text-align: center; padding: 4px; font-size: 10px; color: #888; flex-shrink: 0; user-select: none;">Built by <a href="mailto:moyshiginzburg@gmail.com" style="color: #888; text-decoration: none;">Moyshi</a> | גרסה 13.10.2026</div>
+<!-- ══ Message bar ══════════════════════════════════════════ -->
+<div id="global-banner"></div>
+
+<div id="footer">
+  <a class="help-link" href="https://github.com/moyshiginzburg/podcast-to-drive#faq" target="_blank">נתקלתם בבעיה? פתרון בעיות נפוצות</a>
+  &nbsp;|&nbsp; Built by <a href="mailto:moyshiginzburg@gmail.com" style="text-decoration: none;">Moyshi</a> | גרסה 13.10.2026
+</div>
 
 <!-- ══ RSS URL modal ═══════════════════════════════════════════ -->
 <div id="rss-modal">
   <div class="modal-box">
-    <div class="modal-title">🔗 הוספת הסכת מ-RSS</div>
-    <p style="font-size:12px;color:#555;margin-bottom:8px;">הזן כתובת מלאה של קובץ ה-RSS של ההסכת:</p>
+    <div class="modal-title">הוספת הסכת לפי כתובת</div>
+    <p class="modal-hint">הדביקו כאן את כתובת ההסכת (RSS):</p>
     <input type="text" class="modal-text-input" id="rss-url-input" dir="ltr" placeholder="https://example.com/podcast.xml">
+    <div class="notice error modal-error" id="rss-error"></div>
     <div class="modal-actions">
       <button class="modal-cancel" id="rss-cancel">ביטול</button>
       <button class="modal-confirm" id="rss-confirm">הוסף</button>
@@ -490,32 +681,55 @@
 <!-- ══ OPML import modal ════════════════════════════════════ -->
 <div id="opml-modal">
   <div class="modal-box">
-    <div class="modal-title">📥 ייבוא OPML</div>
-    
-    <div id="opml-drive-section" style="margin-bottom: 15px; padding: 10px; background: #e8f0fe; border-radius: 6px;">
-       <div id="opml-drive-status"><span class="spinner"></span> בודק גיבוי ב-Drive...</div>
-       <div id="opml-drive-result" style="display:none; font-size:12px; color:#1558b0;">
+    <div class="modal-title">שחזור רשימת ההסכתים מגיבוי</div>
+
+    <div class="modal-drive-section">
+       <div id="opml-drive-status"><span class="spinner"></span> בודק אם יש גיבוי בדרייב...</div>
+       <div id="opml-drive-result" style="display:none;">
           <p id="opml-drive-info" style="margin-bottom:8px;"></p>
-          <button id="btn-import-drive" class="btn-primary" style="padding: 4px 10px; font-size:11px;">ייבא מגיבוי זה</button>
+          <button id="btn-import-drive" class="modal-confirm">שחזר מהגיבוי הזה</button>
        </div>
     </div>
 
-    <p style="font-size:12px;color:#555;margin-bottom:8px;">או בחר קובץ מתוך המחשב:</p>
-    <input type="file" id="opml-file-input" accept=".opml,.xml" style="width:100%; font-size:12px; margin-bottom:10px;">
+    <p class="modal-hint">או בחרו קובץ גיבוי מהמחשב (קובץ OPML, גם מאפליקציה אחרת):</p>
+    <input type="file" id="opml-file-input" class="modal-file-input" accept=".opml,.xml">
+    <div class="notice error modal-error" id="opml-error"></div>
 
     <div class="modal-actions">
       <button class="modal-cancel" id="opml-cancel">ביטול</button>
-      <button class="modal-confirm" id="opml-confirm">ייבא</button>
+      <button class="modal-confirm" id="opml-confirm">שחזר מהקובץ</button>
     </div>
   </div>
 </div>
 
 <script>
+/**
+ * Purpose: Client side of the podcast manager dialog. It lets a non-technical user search for
+ *   podcasts and add them, browse a podcast's episodes and send one to Drive, remove a podcast,
+ *   and back up or restore the podcast list – always saying in plain Hebrew what just happened
+ *   and where the files are.
+ * Operation: A single page with three "screens" (podcast list, episode list, search results)
+ *   that are shown one at a time by `showScreen`. Every action calls a server function in
+ *   Code.gs through `google.script.run` and reports the outcome inside the dialog itself: in the
+ *   message bar above the footer (`showBanner`), inside the open modal (`showModalError`), or in
+ *   place of a list that failed to load (`renderLoadError`). Browser popups (`alert`/`confirm`)
+ *   are never used. Server error text is turned into user-facing Hebrew by `friendlyError`.
+ */
+
 // ══════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════
 let currentPodcast = null;   // { url, title, imageUrl }
 let subscriptions  = [];     // [{ url, title, imageUrl, subscribeDate }]
+let podcastSortMode = 'default';
+// Whether the 6-hour automatic download is on. Read once with the podcast list; it cannot change
+// while this dialog is open, because the dialog is modal and blocks the spreadsheet menu.
+let autoDownloadEnabled = true;
+// Where the episode screen was opened from, so "back" returns to the same screen and position
+let episodesOrigin = { screen: 'screen-podcasts', scrollTop: 0 };
+// True after a podcast was added or removed from the episode screen: the podcast list on screen
+// no longer matches `subscriptions` and is redrawn when the user returns to it
+let podcastListStale = false;
 
 // ══════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -523,6 +737,46 @@ let subscriptions  = [];     // [{ url, title, imageUrl, subscribeDate }]
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADDING AND REMOVING PODCASTS
+// ══════════════════════════════════════════════════════════════
+// Podcasts can be added and removed from three places (podcast list, search results, episode
+// screen). These helpers do the server call once for all of them and keep the local
+// `subscriptions` array in step, so every screen can tell at once whether a podcast is in the
+// user's list without asking the server again.
+
+function isSubscribed(url) {
+  return subscriptions.some(s => s.url === url);
+}
+
+function requestAdd(pod, onSuccess, onFailure) {
+  google.script.run
+    .withSuccessHandler(result => {
+      if (!result.success) {
+        onFailure(result.message);
+        return;
+      }
+      if (!isSubscribed(pod.url)) {
+        subscriptions.push({ url: pod.url, title: pod.title, imageUrl: pod.imageUrl || '', subscribeDate: Date.now() });
+      }
+      podcastListStale = true;
+      onSuccess();
+    })
+    .withFailureHandler(onFailure)
+    .addSubscription(pod.url, pod.title, pod.imageUrl || '');
+}
+
+function requestRemove(pod, onSuccess, onFailure) {
+  google.script.run
+    .withSuccessHandler(() => {
+      subscriptions = subscriptions.filter(s => s.url !== pod.url);
+      podcastListStale = true;
+      onSuccess();
+    })
+    .withFailureHandler(onFailure)
+    .removeSubscription(pod.url);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -537,25 +791,27 @@ function loadPodcastList() {
     .withSuccessHandler(result => {
       subscriptions = result.list || [];
       podcastSortMode = result.sortMode || 'default';
-      
+      autoDownloadEnabled = result.autoEnabled !== false;
+
       const sortSelect = document.getElementById('podcast-sort-select');
       if (sortSelect) sortSelect.value = podcastSortMode;
-      
+
       renderPodcastList();
     })
-    .withFailureHandler(err => {
-      container.innerHTML = `<div class="notice error">שגיאה: ${err.message}</div>`;
-    })
+    .withFailureHandler(err => renderLoadError(container, err, loadPodcastList))
     .getSubscriptionsList();
 }
 
-let podcastSortMode = 'default';
-
 function renderPodcastList() {
   const container = document.getElementById('podcasts-list');
+  podcastListStale = false;
+  // Sorting is only offered when there is something to sort
+  document.getElementById('sort-row').hidden = subscriptions.length < 2;
   if (subscriptions.length === 0) {
     container.innerHTML = `<div class="empty-msg" style="grid-column:1 / -1;">
-      אין מנויים עדיין.<br>לחץ 🔍 לחיפוש, 🔗 להזנת כתובת RSS,<br>או 📥 לייבוא OPML.
+      עדיין לא הוספתם הסכתים.<br>
+      כתבו שם של הסכת בשורת החיפוש למעלה ולחצו "הוסף".<br>
+      פרקים חדשים יירדו אוטומטית לדרייב שלכם.
     </div>`;
     return;
   }
@@ -570,41 +826,46 @@ function renderPodcastList() {
   listToRender.forEach(pod => {
     const item = document.createElement('div');
     item.className = 'podcast-item';
-    const safeId = pod.url.replace(/[^a-zA-Z0-9]/g, '');
     item.innerHTML = `
-      <div class="podcast-main-row">
+      <div class="podcast-main-row" title="הצגת הפרקים">
         ${pod.imageUrl
           ? `<img class="podcast-thumb" src="${escHtml(pod.imageUrl)}" alt="" onerror="this.parentNode.replaceChild(makePlaceholder(), this)">`
           : `<div class="podcast-thumb-placeholder">🎙</div>`}
         <span class="podcast-name">${escHtml(pod.title)}</span>
-        <button class="podcast-remove" title="הסר מנוי" data-url="${escHtml(pod.url)}">×</button>
       </div>
-      <div class="pod-desc-container" id="pod-desc-${safeId}">
+      <div class="pod-desc-container">
         <div class="pod-desc-content"><span class="spinner"></span> טוען תיאור...</div>
       </div>
       <div class="pod-desc-footer">
-        <button class="desc-toggle pod-desc-btn" data-url="${escHtml(pod.url)}">הצג תיאור ▸</button>
+        <button class="desc-toggle pod-desc-btn">הצג תיאור ◂</button>
+        <button class="remove-btn">הסר</button>
+      </div>
+      <div class="remove-confirm">
+        <span class="remove-confirm-text">להסיר את ההסכת מהרשימה? הפרקים שכבר ירדו יישארו בדרייב.</span>
+        <button class="remove-yes">הסר</button>
+        <button class="remove-no">ביטול</button>
       </div>
     `;
 
-    // Click on item → load episodes (but not on remove button)
-    item.querySelector('.podcast-main-row').addEventListener('click', e => {
-      if (e.target.classList.contains('podcast-remove')) return;
-      openEpisodeList(pod);
+    // Click on the podcast → load its episodes
+    item.querySelector('.podcast-main-row').addEventListener('click', () => openEpisodeList(pod, 'screen-podcasts'));
+
+    // Remove: first click asks inside the card, second click ("הסר" in the red row) removes
+    const confirmBtn = item.querySelector('.remove-yes');
+    item.querySelector('.remove-btn').addEventListener('click', () => item.classList.add('confirming'));
+    item.querySelector('.remove-no').addEventListener('click', () => item.classList.remove('confirming'));
+    confirmBtn.addEventListener('click', () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'מסיר...';
+      requestRemove(pod, loadPodcastList, err => {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'הסר';
+        item.classList.remove('confirming');
+        showBanner(friendlyError(err), 'error');
+      });
     });
 
-    // Remove button
-    item.querySelector('.podcast-remove').addEventListener('click', e => {
-      e.stopPropagation();
-      if (!confirm(`הסר את "${pod.title}" מהמנויים?`)) return;
-      google.script.run
-        .withSuccessHandler(() => loadPodcastList())
-        .withFailureHandler(err => alert('שגיאה: ' + err.message))
-        .removeSubscription(pod.url);
-    });
-
-    item.querySelector('.pod-desc-btn').addEventListener('click', function(e) {
-      e.stopPropagation();
+    item.querySelector('.pod-desc-btn').addEventListener('click', function() {
       togglePodcastDesc(this, pod.url);
     });
 
@@ -618,27 +879,36 @@ function togglePodcastDesc(btn, url) {
   const itemNode = btn.closest('.podcast-item, .result-item');
   const container = itemNode.querySelector('.pod-desc-container');
   const content = container.querySelector('.pod-desc-content');
-  
+
   const isOpen = container.classList.toggle('visible');
-  btn.textContent = isOpen ? 'הסתר תיאור ▾' : 'הצג תיאור ▸';
-  
+  btn.textContent = isOpen ? 'הסתר תיאור ▾' : 'הצג תיאור ◂';
+
   if (isOpen && !fetchedPodcasts[url]) {
     fetchedPodcasts[url] = true;
+    const showDescError = () => {
+      // Allow another attempt the next time the description is opened
+      fetchedPodcasts[url] = false;
+      content.innerHTML = `<span style="color:#b3261e">לא הצלחנו לטעון את התיאור כרגע.</span>`;
+    };
     google.script.run
       .withSuccessHandler(res => {
         if (!res.success) {
-          content.innerHTML = `<span style="color:#d93025">שגיאה: ${escHtml(res.error)}</span>`;
+          showDescError();
           return;
         }
-        let html = res.description ? escHtml(res.description).replace(/\n/g, '<br>') : '';
-        if (res.link) {
-          html += (html ? '<br><br>' : '') + `<a href="${escHtml(res.link)}" target="_blank">🔗 לאתר ההסכת</a>`;
+        content.textContent = '';
+        if (res.description) {
+          renderRichText(content.appendChild(document.createElement('div')), res.description);
         }
-        content.innerHTML = html || 'אין תיאור זמין.';
+        const siteLink = makeSafeLink(res.link);
+        if (siteLink) {
+          siteLink.textContent = '🔗 לאתר ההסכת';
+          siteLink.className = 'pod-site-link';
+          content.appendChild(siteLink);
+        }
+        if (!content.textContent.trim()) content.textContent = 'אין תיאור זמין.';
       })
-      .withFailureHandler(err => {
-        content.innerHTML = `<span style="color:#d93025">שגיאה בטעינה</span>`;
-      })
+      .withFailureHandler(showDescError)
       .fetchPodcastInfo(url);
   }
 }
@@ -653,31 +923,130 @@ function makePlaceholder() {
 // ══════════════════════════════════════════════════════════════
 // EPISODE LIST SCREEN
 // ══════════════════════════════════════════════════════════════
-function openEpisodeList(pod) {
+// Opens the episode screen for a podcast, whether or not it is in the user's list.
+// `originScreen` is the screen the user came from ('screen-podcasts' or 'screen-search'); it is
+// remembered together with the scroll position so that "back" returns to exactly that spot.
+function openEpisodeList(pod, originScreen) {
+  const content = document.getElementById('content');
+  episodesOrigin = { screen: originScreen, scrollTop: content.scrollTop };
   currentPodcast = pod;
   document.getElementById('episodes-podcast-title').textContent = pod.title;
+  document.getElementById('btn-back-episodes').textContent =
+    originScreen === 'screen-search' ? '→ חזרה לתוצאות החיפוש' : '→ חזרה לרשימת ההסכתים';
+  renderSubscriptionBar();
+  showScreen('screen-episodes');
+  content.scrollTop = 0;
+  loadEpisodes(pod);
+}
+
+function loadEpisodes(pod) {
   const container = document.getElementById('episodes-list');
   container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>טוען פרקים...</div>`;
-  showScreen('screen-episodes');
 
+  const retry = () => loadEpisodes(pod);
   google.script.run
     .withSuccessHandler(result => {
+      // The user may have moved on to another podcast while this one was loading
+      if (currentPodcast !== pod) return;
       if (!result.success) {
-        container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(result.error)}</div>`;
+        renderLoadError(container, result.error, retry);
         return;
       }
       renderEpisodes(result.episodes || []);
     })
     .withFailureHandler(err => {
-      container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(err.message)}</div>`;
+      if (currentPodcast !== pod) return;
+      renderLoadError(container, err, retry);
     })
     .fetchEpisodeList(pod.url);
 }
 
+// Returns from the episode screen to the screen it was opened from, at the same scroll position.
+// Whatever was added or removed meanwhile is reflected there first.
+function closeEpisodeList() {
+  if (episodesOrigin.screen === 'screen-search') {
+    refreshSearchResultStates();
+  } else if (podcastListStale) {
+    renderPodcastList();
+  }
+  showScreen(episodesOrigin.screen);
+  document.getElementById('content').scrollTop = episodesOrigin.scrollTop;
+}
+
+// Purpose: Say clearly, above the episode list, whether the podcast being viewed is in the
+//   user's list, and offer the matching action for the whole podcast right there.
+// Operation: For a podcast in the list it shows a green bar with a "remove the podcast" button;
+//   the wording names the podcast explicitly so it cannot be mistaken for removing one episode,
+//   and the removal is confirmed inside the bar. For a podcast that is not in the list it shows
+//   a yellow bar explaining that single episodes can still be downloaded, with an "add" button.
+//   After either action the bar is redrawn for the new state and the user stays on the screen.
+function renderSubscriptionBar() {
+  const bar = document.getElementById('episodes-sub-bar');
+  const pod = currentPodcast;
+  const redrawIfStillHere = () => { if (currentPodcast === pod) renderSubscriptionBar(); };
+
+  if (!isSubscribed(pod.url)) {
+    bar.className = 'sub-bar not-subscribed';
+    bar.innerHTML = `
+      <span class="sub-bar-text">ההסכת הזה לא ברשימה שלכם. אפשר להוריד ממנו פרקים בודדים, או להוסיף אותו לרשימה${autoDownloadEnabled ? ' כדי שפרקים חדשים יירדו אוטומטית' : ''}.</span>
+      <button class="subscribe-btn">הוסף את ההסכת לרשימה</button>
+    `;
+    const addBtn = bar.querySelector('.subscribe-btn');
+    addBtn.addEventListener('click', () => {
+      addBtn.disabled = true;
+      addBtn.textContent = 'רגע...';
+      requestAdd(pod, () => {
+        redrawIfStillHere();
+        showBanner(buildAddedMessage(true), 'success', false);
+      }, raw => {
+        redrawIfStillHere();
+        showBanner(friendlyError(raw), 'error');
+      });
+    });
+    return;
+  }
+
+  bar.className = 'sub-bar subscribed';
+  bar.innerHTML = `
+    <span class="sub-bar-text">✓ ההסכת הזה ברשימה שלכם${autoDownloadEnabled ? ', ופרקים חדשים שלו יורדים אוטומטית' : ''}.</span>
+    <button class="remove-btn">הסר את ההסכת מהרשימה</button>
+  `;
+  bar.querySelector('.remove-btn').addEventListener('click', () => {
+    bar.className = 'sub-bar confirming';
+    bar.innerHTML = `
+      <span class="sub-bar-text">להסיר את ההסכת כולו מהרשימה? הפרקים שכבר ירדו יישארו בדרייב.</span>
+      <button class="remove-yes">הסר את ההסכת</button>
+      <button class="remove-no">ביטול</button>
+    `;
+    bar.querySelector('.remove-no').addEventListener('click', redrawIfStillHere);
+    const confirmBtn = bar.querySelector('.remove-yes');
+    confirmBtn.addEventListener('click', () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'מסיר...';
+      requestRemove(pod, () => {
+        redrawIfStillHere();
+        showBanner('ההסכת הוסר מהרשימה. הפרקים שכבר ירדו נשארו בדרייב.', 'success');
+      }, raw => {
+        redrawIfStillHere();
+        showBanner(friendlyError(raw), 'error');
+      });
+    });
+  });
+}
+
+/**
+ * Purpose: Draw the episode list, showing up front which episodes were already downloaded and
+ *   which are currently on their way to Drive.
+ * Operation: Uses the `downloaded` / `queued` flags the server attaches to every episode.
+ *   A queued episode gets a disabled green "downloading in the background" button. A downloaded
+ *   one gets a "downloaded before" label and a still-clickable "download again" button: the
+ *   server only knows the episode was downloaded once, not whether the file is still in Drive,
+ *   and it checks Drive for real when the button is clicked.
+ */
 function renderEpisodes(episodes) {
   const container = document.getElementById('episodes-list');
   if (episodes.length === 0) {
-    container.innerHTML = `<div class="empty-msg">לא נמצאו פרקים בפיד זה.</div>`;
+    container.innerHTML = `<div class="empty-msg">לא נמצאו פרקים בהסכת הזה.</div>`;
     return;
   }
 
@@ -688,7 +1057,17 @@ function renderEpisodes(episodes) {
     item.dataset.url = ep.url;
 
     const dateStr = ep.date ? formatDisplayDate(ep.date) : '';
-    const hasDesc = ep.description && ep.description.trim().length > 0;
+    const hasDesc = !!ep.hasDescription;
+    const isQueued = !!ep.queued;
+    const wasDownloaded = !!ep.downloaded && !isQueued;
+
+    let downloadBtnHtml = `<button class="download-btn">הורד לדרייב</button>`;
+    if (isQueued) {
+      downloadBtnHtml = `<button class="download-btn success" disabled>✓ יורד ברקע</button>`;
+    } else if (wasDownloaded) {
+      downloadBtnHtml = `<span class="episode-status">✓ ירד בעבר</span>
+          <button class="download-btn secondary">הורד שוב</button>`;
+    }
 
     item.innerHTML = `
       <div class="episode-header">
@@ -696,11 +1075,11 @@ function renderEpisodes(episodes) {
           <div class="episode-title">${escHtml(ep.title)}</div>
           ${dateStr ? `<div class="episode-date">${escHtml(dateStr)}</div>` : ''}
         </div>
-        ${hasDesc ? `<div class="episode-desc" id="desc-${idx}">${escHtml(ep.description)}</div>` : ''}
+        ${hasDesc ? `<div class="episode-desc" id="desc-${idx}"></div>` : ''}
       </div>
       <div class="episode-footer">
-        ${hasDesc ? `<button class="desc-toggle" data-idx="${idx}">הצג תיאור ▸</button>` : '<span></span>'}
-        <button class="download-btn" data-ep-idx="${idx}">הורד לדרייב</button>
+        ${hasDesc ? `<button class="desc-toggle" data-idx="${idx}">הצג תיאור ◂</button>` : ''}
+        <div class="episode-actions">${downloadBtnHtml}</div>
       </div>
     `;
 
@@ -708,8 +1087,14 @@ function renderEpisodes(episodes) {
     if (hasDesc) {
       item.querySelector('.desc-toggle').addEventListener('click', function() {
         const descEl = document.getElementById(`desc-${idx}`);
+        // Built on first opening only, so a long episode list does not pay for descriptions
+        // that nobody opens
+        if (!descEl.dataset.filled) {
+          renderRichText(descEl, ep.descriptionHtml);
+          descEl.dataset.filled = 'yes';
+        }
         const open = descEl.classList.toggle('visible');
-        this.textContent = open ? 'הסתר תיאור ▾' : 'הצג תיאור ▸';
+        this.textContent = open ? 'הסתר תיאור ▾' : 'הצג תיאור ◂';
       });
     }
 
@@ -722,61 +1107,68 @@ function renderEpisodes(episodes) {
   });
 }
 
+/**
+ * Purpose: Send one episode to Drive and tell the user, in words, what will happen next.
+ * Operation: Calls `downloadEpisode`, which only adds the episode to the server's background
+ *   queue. While waiting the button shows "one moment"; afterwards it turns into a disabled green
+ *   "downloading in the background" button and the message bar explains that the file will show
+ *   up in Drive within a few minutes. If the server finds the file already in Drive it says so.
+ *   On failure the button becomes a red "try again" and the reason goes to the message bar.
+ */
 function triggerDownload(btn, ep) {
-  btn.textContent = '⏳ מוריד...';
+  const statusLabel = btn.parentNode.querySelector('.episode-status');
+  btn.textContent = 'רגע...';
   btn.disabled = true;
   btn.classList.remove('success', 'error');
+
+  const markDone = text => {
+    btn.classList.remove('secondary', 'error');
+    btn.classList.add('success');
+    btn.disabled = true;
+    btn.textContent = text;
+    if (statusLabel) statusLabel.remove();
+  };
+  const markFailed = raw => {
+    btn.classList.remove('secondary', 'success');
+    btn.classList.add('error');
+    btn.disabled = false;
+    btn.textContent = 'נסו שוב';
+    showBanner(friendlyError(raw), 'error');
+  };
 
   const episodeData = {
     url:          ep.url,
     title:        ep.title,
     date:         ep.date,
-    description:  ep.description || '',
+    // The server turns this into the plain text it stores on the file in Drive
+    descriptionHtml: ep.descriptionHtml || '',
     podcastTitle: currentPodcast ? currentPodcast.title : 'כללי'
   };
 
   google.script.run
     .withSuccessHandler(result => {
       if (result.queued) {
-        // Episode was enqueued – the worker will handle the actual download in the background.
-        // Show "in queue" state immediately without blocking the UI.
-        btn.classList.add('success');
-        btn.disabled = true;
-        btn.textContent = result.alreadyQueued ? '✓ כבר בתור' : '✓ בתור';
+        // Episode was enqueued – the worker handles the actual download in the background.
+        markDone('✓ יורד ברקע');
+        showBanner(
+          result.alreadyQueued
+            ? 'הפרק הזה כבר יורד ברקע. הוא יופיע בתיקייה בדרייב בעוד כמה דקות.'
+            : 'הפרק יורד ברקע ויופיע בתיקייה בדרייב בעוד כמה דקות. אפשר לסגור את החלון.',
+          'success',
+          false
+        );
+      } else if (result.alreadyDownloaded) {
+        // The server checked Drive and the file is still there
+        markDone('✓ כבר בדרייב');
+        showBanner('הפרק הזה כבר נמצא בתיקייה בדרייב.', 'success', false);
       } else if (result.success) {
         // Legacy direct-download path (kept for safety – not expected to be reached)
-        btn.classList.add('success');
-        if (result.files && result.files.length === 1) {
-          const link = document.createElement('a');
-          link.href = result.files[0].driveUrl;
-          link.target = '_blank';
-          link.textContent = '✓ בדרייב';
-          link.style.cssText = 'font-size:11px;color:#fff;text-decoration:none;';
-          btn.replaceWith(link);
-        } else if (result.files && result.files.length > 1) {
-          btn.textContent = `✓ ${result.files.length} חלקים בדרייב`;
-        } else {
-          btn.textContent = '✓ בדרייב';
-        }
+        markDone('✓ בדרייב');
       } else {
-        btn.classList.add('error');
-        btn.disabled = false;
-        btn.textContent = '✗ שגיאה';
-        btn.title = result.error || 'שגיאה לא ידועה';
-        if (result.alreadyDownloaded) {
-          btn.textContent = '✓ כבר הורד';
-          btn.classList.remove('error');
-          btn.classList.add('success');
-          btn.disabled = true;
-        }
+        markFailed(result.error);
       }
     })
-    .withFailureHandler(err => {
-      btn.classList.add('error');
-      btn.disabled = false;
-      btn.textContent = '✗ שגיאה';
-      btn.title = err.message || '';
-    })
+    .withFailureHandler(markFailed)
     .downloadEpisode(episodeData);
 }
 
@@ -788,9 +1180,8 @@ function runSearch() {
   if (!query) return;
 
   const container = document.getElementById('search-results-list');
-  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>מחפש (Apple Podcasts + Podcast Index)...</div>`;
+  container.innerHTML = `<div class="empty-msg"><span class="spinner"></span><br>מחפש...</div>`;
   showScreen('screen-search');
-  document.getElementById('search-bar').classList.remove('visible');
 
   // Promise 1: iTunes search (server-side)
   const itunesPromise = new Promise((resolve, reject) => {
@@ -808,8 +1199,11 @@ function runSearch() {
     google.script.run
       .withSuccessHandler(headers => {
         if (!headers) return resolve([]); // Silently skip if keys are missing
-        
-        const url = `https://api.podcastindex.org/api/1.0/search/byterm?q=${encodeURIComponent(query)}&max=20`;
+
+        // The two slashes of the address are deliberately split across two strings. The served
+        // copy of this script has its comments stripped, and a double slash inside a string was
+        // cut off as if it began a comment – which broke the whole script. Do not rejoin them.
+        const url = 'https:/' + '/api.podcastindex.org/api/1.0/search/byterm?q=' + encodeURIComponent(query) + '&max=20';
         fetch(url, { headers: headers })
           .then(res => {
              if (!res.ok) throw new Error('PI HTTP error ' + res.status);
@@ -821,8 +1215,7 @@ function runSearch() {
                 artistName: f.author || '',
                 artworkUrl: f.image || f.artwork || '',
                 feedUrl: f.url,
-                genre: '',
-                isSubscribed: false // Evaluated later
+                genre: ''
              }));
              resolve(results);
           })
@@ -840,11 +1233,22 @@ function runSearch() {
 
   Promise.allSettled([itunesPromise, piPromise]).then(results => {
     let allResults = [];
-    
+    // A podcast is identified by its feed address. Each address is shown once, whichever source
+    // it came from: Apple itself sometimes lists the same feed under two entries.
+    const seenFeedUrls = new Set();
+    const addUnique = list => {
+       for (const r of list) {
+          if (r.feedUrl && !seenFeedUrls.has(r.feedUrl)) {
+             allResults.push(r);
+             seenFeedUrls.add(r.feedUrl);
+          }
+       }
+    };
+
     // Process iTunes
     if (results[0].status === 'fulfilled') {
        console.log(`[Search] iTunes returned ${results[0].value.length} results for: "${query}"`, results[0].value);
-       allResults = allResults.concat(results[0].value);
+       addUnique(results[0].value);
     } else {
        console.error(`[Search] iTunes search failed for: "${query}"`, results[0].reason);
     }
@@ -853,13 +1257,7 @@ function runSearch() {
     if (results[1].status === 'fulfilled') {
        const piResults = results[1].value;
        console.log(`[Search] Podcast Index returned ${piResults.length} results for: "${query}"`, piResults);
-       const existingUrls = new Set(allResults.map(r => r.feedUrl));
-       for (const r of piResults) {
-          if (!existingUrls.has(r.feedUrl) && r.feedUrl) {
-             allResults.push(r);
-             existingUrls.add(r.feedUrl);
-          }
-       }
+       addUnique(piResults);
     } else {
        console.error(`[Search] Podcast Index search failed for: "${query}"`, results[1].reason);
     }
@@ -877,13 +1275,8 @@ function runSearch() {
     };
     google.script.run.logDualSearchResults(logData);
 
-    // Evaluate isSubscribed against global 'subscriptions' array
-    allResults.forEach(r => {
-       r.isSubscribed = subscriptions.some(s => s.url === r.feedUrl);
-    });
-
     if (allResults.length === 0 && results[0].status === 'rejected') {
-       container.innerHTML = `<div class="notice error">שגיאה: ${escHtml(results[0].reason.message || 'שגיאת חיפוש')}</div>`;
+       renderLoadError(container, results[0].reason, runSearch, 'search');
        return;
     }
 
@@ -894,104 +1287,128 @@ function runSearch() {
 function renderSearchResults(results) {
   const container = document.getElementById('search-results-list');
   if (results.length === 0) {
-    container.innerHTML = `<div class="empty-msg">לא נמצאו תוצאות.</div>`;
+    container.innerHTML = `<div class="empty-msg">לא נמצאו תוצאות. נסו לכתוב את שם ההסכת בצורה אחרת.</div>`;
     return;
   }
 
   container.innerHTML = '';
   results.forEach(r => {
+    const pod = { url: r.feedUrl, title: r.trackName || r.feedUrl, imageUrl: r.artworkUrl || '' };
     const item = document.createElement('div');
     item.className = 'result-item';
-    const safeId = r.feedUrl.replace(/[^a-zA-Z0-9]/g, '');
+    item.dataset.feed = pod.url;
     item.innerHTML = `
       <div class="result-main-row">
-        ${r.artworkUrl
-          ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.replaceWith(makePlaceholder())">`
-          : `<div class="podcast-thumb-placeholder">🎙</div>`}
-        <div class="result-info">
-          <div class="result-name">${escHtml(r.trackName)}</div>
-          <div class="result-artist">${escHtml(r.artistName)}</div>
+        <div class="result-open" title="הצגת הפרקים">
+          ${r.artworkUrl
+            ? `<img class="result-thumb" src="${escHtml(r.artworkUrl)}" alt="" onerror="this.replaceWith(makePlaceholder())">`
+            : `<div class="podcast-thumb-placeholder">🎙</div>`}
+          <div class="result-info">
+            <div class="result-name">${escHtml(r.trackName)}</div>
+            <div class="result-artist">${escHtml(r.artistName)}</div>
+          </div>
         </div>
-        <button class="subscribe-btn ${r.isSubscribed ? 'subscribed' : ''}"
-                ${r.isSubscribed ? 'disabled' : ''}
-                data-feed="${escHtml(r.feedUrl)}"
-                data-name="${escHtml(r.trackName)}"
-                data-img="${escHtml(r.artworkUrl)}">
-          ${r.isSubscribed ? '✓ מנוי' : 'הרשם'}
-        </button>
+        <button class="subscribe-btn"></button>
       </div>
-      <div class="pod-desc-container" id="pod-desc-${safeId}">
+      <div class="pod-desc-container">
         <div class="pod-desc-content"><span class="spinner"></span> טוען תיאור...</div>
       </div>
       <div class="pod-desc-footer">
-        <button class="desc-toggle pod-desc-btn" data-url="${escHtml(r.feedUrl)}">הצג תיאור ▸</button>
+        <button class="desc-toggle pod-desc-btn">הצג תיאור ◂</button>
+        <button class="desc-toggle result-episodes-btn">לרשימת הפרקים ←</button>
       </div>
     `;
 
-    item.querySelector('.subscribe-btn').addEventListener('click', function() {
-      if (this.disabled) return;
-      this.disabled = true;
-      this.textContent = '...';
-      const feedUrl   = this.dataset.feed;
-      const title     = this.dataset.name;
-      const imageUrl  = this.dataset.img;
+    // Click on the podcast (or on the link below it) → its episodes, in the list or not
+    const openEpisodes = () => openEpisodeList(pod, 'screen-search');
+    item.querySelector('.result-open').addEventListener('click', openEpisodes);
+    item.querySelector('.result-episodes-btn').addEventListener('click', openEpisodes);
 
-      google.script.run
-        .withSuccessHandler(result => {
-          if (result.success) {
-            this.classList.add('subscribed');
-            this.textContent = '✓ מנוי';
-          } else {
-            this.disabled = false;
-            this.textContent = 'הרשם';
-            alert(result.message || 'שגיאה');
-          }
-        })
-        .withFailureHandler(err => {
-          this.disabled = false;
-          this.textContent = 'הרשם';
-          alert('שגיאה: ' + err.message);
-        })
-        .addSubscription(feedUrl, title, imageUrl);
+    const addBtn = item.querySelector('.subscribe-btn');
+    setAddButtonState(addBtn, isSubscribed(pod.url));
+    addBtn.addEventListener('click', () => {
+      addBtn.disabled = true;
+      addBtn.textContent = 'רגע...';
+      requestAdd(pod, () => {
+        setAddButtonState(addBtn, true);
+        showBanner(buildAddedMessage(false), 'success', false);
+      }, raw => {
+        setAddButtonState(addBtn, false);
+        showBanner(friendlyError(raw), 'error');
+      });
     });
 
-    item.querySelector('.pod-desc-btn').addEventListener('click', function(e) {
-      e.stopPropagation();
-      togglePodcastDesc(this, r.feedUrl);
+    item.querySelector('.pod-desc-btn').addEventListener('click', function() {
+      togglePodcastDesc(this, pod.url);
     });
 
     container.appendChild(item);
   });
 }
 
+// Shows on a search result whether that podcast is already in the user's list
+function setAddButtonState(btn, subscribed) {
+  btn.disabled = subscribed;
+  btn.classList.toggle('subscribed', subscribed);
+  btn.textContent = subscribed ? '✓ ברשימה שלכם' : 'הוסף';
+}
+
+// Brings the search results up to date after podcasts were added or removed on the episode screen
+function refreshSearchResultStates() {
+  document.querySelectorAll('#search-results-list .result-item').forEach(item => {
+    setAddButtonState(item.querySelector('.subscribe-btn'), isSubscribed(item.dataset.feed));
+  });
+}
+
+/**
+ * Purpose: Word the "podcast added" message so it never promises something that will not happen.
+ * Operation: A newly added podcast only brings episodes published from now on, and only when the
+ *   6-hour automatic download is on. When it is on, the message says new episodes will arrive by
+ *   themselves; when it is off, it says so and points to the spreadsheet menu item that turns it
+ *   on. Both versions end with how to get older episodes, worded for where the user is.
+ * @param {boolean} onEpisodeScreen - True when the podcast was added from its own episode screen.
+ * @returns {string} - Hebrew message for the message bar.
+ */
+function buildAddedMessage(onEpisodeScreen) {
+  const olderEpisodes = onEpisodeScreen
+    ? 'רוצים גם פרקים קודמים? אפשר להוריד אותם מהרשימה שכאן.'
+    : 'רוצים גם פרקים קודמים? לחצו על ההסכת ובחרו אותם.';
+  if (autoDownloadEnabled) {
+    return `✓ ההסכת נוסף. פרקים חדשים שיתפרסמו מכאן והלאה יירדו אוטומטית לדרייב. ${olderEpisodes}`;
+  }
+  return '✓ ההסכת נוסף. ההורדה האוטומטית כבויה כרגע, ולכן פרקים חדשים לא יירדו לבד. ' +
+    'להפעלה: סגרו את החלון ובחרו בתפריט 🎙 הסכתים ← הגדר הורדה אוטומטית. ' + olderEpisodes;
+}
+
 // ══════════════════════════════════════════════════════════════
-// OPML IMPORT
+// RESTORE FROM BACKUP (OPML IMPORT)
 // ══════════════════════════════════════════════════════════════
 function openImportModal() {
   document.getElementById('opml-file-input').value = '';
+  clearModalError('opml-error');
   document.getElementById('opml-modal').classList.add('visible');
-  
+
   document.getElementById('opml-drive-status').style.display = 'block';
   document.getElementById('opml-drive-result').style.display = 'none';
   document.getElementById('opml-drive-info').innerHTML = '';
-  
+
   google.script.run
     .withSuccessHandler(res => {
       document.getElementById('opml-drive-status').style.display = 'none';
       if (res.success && res.found) {
-        document.getElementById('opml-drive-info').innerHTML = `נמצא גיבוי בדרייב: <b>${escHtml(res.name)}</b><br><span style="color:#888;">מתאריך: ${formatDisplayDate(res.date)}</span>`;
+        document.getElementById('opml-drive-info').innerHTML = `נמצא גיבוי בדרייב: <b>${escHtml(res.name)}</b><br>מתאריך: ${escHtml(formatDisplayDate(res.date))}`;
         document.getElementById('btn-import-drive').dataset.fileid = res.id;
         document.getElementById('opml-drive-result').style.display = 'block';
         document.getElementById('btn-import-drive').style.display = 'inline-block';
       } else {
-        document.getElementById('opml-drive-info').innerHTML = 'לא נמצאו גיבויים קודמים בתיקיית הסכתים.';
+        document.getElementById('opml-drive-info').innerHTML = 'לא נמצא גיבוי קודם בתיקיית ההסכתים בדרייב.';
         document.getElementById('opml-drive-result').style.display = 'block';
         document.getElementById('btn-import-drive').style.display = 'none';
       }
     })
     .withFailureHandler(err => {
       document.getElementById('opml-drive-status').style.display = 'none';
-      document.getElementById('opml-drive-info').innerHTML = 'שגיאה בחיפוש גיבויים בדרייב.';
+      document.getElementById('opml-drive-info').innerHTML = 'לא הצלחנו לבדוק אם יש גיבוי בדרייב.';
       document.getElementById('opml-drive-result').style.display = 'block';
       document.getElementById('btn-import-drive').style.display = 'none';
     })
@@ -1004,6 +1421,7 @@ function closeImportModal() {
 
 function openRssModal() {
   document.getElementById('rss-url-input').value = '';
+  clearModalError('rss-error');
   document.getElementById('rss-modal').classList.add('visible');
   setTimeout(() => document.getElementById('rss-url-input').focus(), 50);
 }
@@ -1015,12 +1433,13 @@ function closeRssModal() {
 function doAddRss() {
   const url = document.getElementById('rss-url-input').value.trim();
   if (!url) {
-    alert('יש להזין כתובת RSS.');
+    showModalError('rss-error', 'הדביקו קודם את כתובת ההסכת.');
     return;
   }
+  clearModalError('rss-error');
   const btn = document.getElementById('rss-confirm');
   btn.disabled = true;
-  btn.textContent = '...';
+  btn.textContent = 'רגע...';
 
   google.script.run
     .withSuccessHandler(result => {
@@ -1029,53 +1448,62 @@ function doAddRss() {
       if (result.success) {
         closeRssModal();
         loadPodcastList();
-        showBanner('✓ ההסכת נוסף למנויים', 'success');
+        showBanner(buildAddedMessage(), 'success', false);
       } else {
-        alert(result.error || 'שגיאה');
+        showModalError('rss-error', friendlyError(result.error, 'address'));
       }
     })
     .withFailureHandler(err => {
       btn.disabled = false;
       btn.textContent = 'הוסף';
-      alert('שגיאה: ' + err.message);
+      showModalError('rss-error', friendlyError(err, 'address'));
     })
     .addSubscriptionFromRssUrl(url);
+}
+
+const IMPORT_PROGRESS_HTML = '<span class="spinner"></span> מוסיף את ההסכתים מהגיבוי, זה עשוי לקחת כמה רגעים...';
+
+/** Builds the summary shown after a restore: how many podcasts were added and how many existed. */
+function buildImportSummary(result) {
+  const skipped = result.skipped ? ` ${result.skipped} כבר היו ברשימה.` : '';
+  return `✓ נוספו ${result.added} הסכתים.${skipped}`;
 }
 
 function doImport() {
   const fileInput = document.getElementById('opml-file-input');
   if (!fileInput.files || fileInput.files.length === 0) {
-    alert('יש לבחור קובץ OPML מהמחשב.');
+    showModalError('opml-error', 'בחרו קודם קובץ גיבוי מהמחשב.');
     return;
   }
-  
+  clearModalError('opml-error');
+
   const file = fileInput.files[0];
   const reader = new FileReader();
 
   const btn = document.getElementById('opml-confirm');
   btn.disabled = true;
-  btn.textContent = '...';
+  btn.textContent = 'רגע...';
 
   reader.onload = function(e) {
     const text = e.target.result;
-    showBanner('<span class="spinner"></span> מייבא הסכתים ומושך תמונות (עשוי לקחת קצת זמן)...', 'info', false);
+    showBanner(IMPORT_PROGRESS_HTML, 'info', false);
     google.script.run
       .withSuccessHandler(result => {
         btn.disabled = false;
-        btn.textContent = 'ייבא';
+        btn.textContent = 'שחזר מהקובץ';
         closeImportModal();
         if (result.success) {
-          showBanner(`✓ יובאו ${result.added} הסכתים, דולגו ${result.skipped} כפילויות.`, 'success');
+          showBanner(buildImportSummary(result), 'success');
           loadPodcastList();
         } else {
-          showBanner('שגיאה: ' + result.error, 'error');
+          showBanner(friendlyError(result.error), 'error');
         }
       })
       .withFailureHandler(err => {
         btn.disabled = false;
-        btn.textContent = 'ייבא';
+        btn.textContent = 'שחזר מהקובץ';
         closeImportModal();
-        showBanner('שגיאה: ' + err.message, 'error');
+        showBanner(friendlyError(err), 'error');
       })
       .importOPML(text);
   };
@@ -1088,47 +1516,48 @@ function doImportFromDrive() {
   if (!fileId) return;
 
   btn.disabled = true;
-  btn.textContent = '...';
-  showBanner('<span class="spinner"></span> מייבא הסכתים ומושך תמונות (עשוי לקחת קצת זמן)...', 'info', false);
+  btn.textContent = 'רגע...';
+  showBanner(IMPORT_PROGRESS_HTML, 'info', false);
 
   google.script.run
     .withSuccessHandler(result => {
       btn.disabled = false;
-      btn.textContent = 'ייבא מגיבוי זה';
+      btn.textContent = 'שחזר מהגיבוי הזה';
       closeImportModal();
       if (result.success) {
-        showBanner(`✓ יובאו ${result.added} הסכתים, דולגו ${result.skipped} כפילויות.`, 'success');
+        showBanner(buildImportSummary(result), 'success');
         loadPodcastList();
       } else {
-        showBanner('שגיאה: ' + result.error, 'error');
+        showBanner(friendlyError(result.error), 'error');
       }
     })
     .withFailureHandler(err => {
       btn.disabled = false;
-      btn.textContent = 'ייבא מגיבוי זה';
+      btn.textContent = 'שחזר מהגיבוי הזה';
       closeImportModal();
-      showBanner('שגיאה: ' + err.message, 'error');
+      showBanner(friendlyError(err), 'error');
     })
     .importOPMLFromDrive(fileId);
 }
 
 // ══════════════════════════════════════════════════════════════
-// OPML EXPORT
+// BACKUP (OPML EXPORT)
 // ══════════════════════════════════════════════════════════════
 function doExport() {
-  showBanner('<span class="spinner"></span> מייצא...', 'info', false);
+  showBanner('<span class="spinner"></span> מגבה...', 'info', false);
   google.script.run
     .withSuccessHandler(result => {
       if (result.success) {
         showBanner(
-          `✓ גיבוי נשמר בתיקיית <b>הסכתים</b> בדרייב:<br><a href="${result.driveUrl}" target="_blank" style="text-decoration:underline;">${escHtml(result.fileName)}</a>`,
-          'success'
+          `✓ הגיבוי נשמר בתיקיית <b>הסכתים</b> בדרייב:<br><a href="${escHtml(result.driveUrl)}" target="_blank">${escHtml(result.fileName)}</a>`,
+          'success',
+          false
         );
       } else {
-        showBanner('שגיאה: ' + escHtml(result.error), 'error');
+        showBanner(friendlyError(result.error), 'error');
       }
     })
-    .withFailureHandler(err => showBanner('שגיאה: ' + escHtml(err.message), 'error'))
+    .withFailureHandler(err => showBanner(friendlyError(err), 'error'))
     .exportOPML();
 }
 
@@ -1144,22 +1573,252 @@ function loadLastAutoRunLabel() {
     .getLastAutoRunLabel();
 }
 
+/**
+ * Purpose: Turn the header's "open the folder in Drive" button into a working link.
+ * Operation: Asks the server for the podcasts folder URL in a request of its own, so the Drive
+ *   lookup never delays the podcast list. The button stays hidden until the URL arrives (and
+ *   remains hidden if the lookup fails), so it is never a link that leads nowhere.
+ */
+function loadDriveFolderLink() {
+  const link = document.getElementById('btn-open-drive');
+  google.script.run
+    .withSuccessHandler(url => {
+      if (!url) return;
+      link.href = url;
+      link.hidden = false;
+    })
+    .withFailureHandler(err => console.warn('Failed to get the Drive folder URL:', err))
+    .getPodcastsFolderUrl();
+}
+
 // ══════════════════════════════════════════════════════════════
-// BANNER / NOTICE
+// MESSAGES & ERRORS
 // ══════════════════════════════════════════════════════════════
 let bannerTimer = null;
 
+/**
+ * Purpose: Show a message in the bar above the footer, in a way a slow reader can keep up with.
+ * Operation: Replaces the bar's content. Progress messages (type 'info') have no close button
+ *   and are replaced by the result that follows them. Every other message gets a "close" button.
+ *   A message disappears by itself after 5 seconds only when `autoHide` is true and it is not an
+ *   error; errors, and messages that carry a link or an explanation (callers pass
+ *   `autoHide = false`), stay until the user closes them or another message replaces them.
+ * @param {string} html - Message HTML (already escaped by the caller where needed).
+ * @param {string} type - 'success' | 'error' | 'info'.
+ * @param {boolean} autoHide - Whether the message may disappear by itself.
+ */
 function showBanner(html, type, autoHide = true) {
-  let banner = document.getElementById('global-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'global-banner';
-    banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:200;';
-    document.body.appendChild(banner);
-  }
-  banner.innerHTML = `<div class="notice ${type}" style="margin:0;border-radius:0;">${html}</div>`;
+  const banner = document.getElementById('global-banner');
+  const closeBtn = type === 'info' ? '' : '<button class="notice-close">סגור</button>';
+  banner.innerHTML = `<div class="notice ${type}"><div class="notice-text">${html}</div>${closeBtn}</div>`;
+  const closeEl = banner.querySelector('.notice-close');
+  if (closeEl) closeEl.addEventListener('click', hideBanner);
+
   if (bannerTimer) clearTimeout(bannerTimer);
-  if (autoHide) bannerTimer = setTimeout(() => { banner.innerHTML = ''; }, 5000);
+  bannerTimer = null;
+  if (autoHide && type !== 'error') bannerTimer = setTimeout(hideBanner, 5000);
+}
+
+function hideBanner() {
+  if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = null;
+  document.getElementById('global-banner').innerHTML = '';
+}
+
+function showModalError(id, html) {
+  const el = document.getElementById(id);
+  el.innerHTML = html;
+  el.classList.add('visible');
+}
+
+function clearModalError(id) {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  el.classList.remove('visible');
+}
+
+/**
+ * Purpose: Replace a list that failed to load with an explanation and a "try again" button,
+ *   instead of leaving the user on a dead screen.
+ * @param {Element} container - The list element to fill.
+ * @param {*} raw - The error (Error object or server error string).
+ * @param {Function} retryFn - Called when the user clicks "try again".
+ * @param {string} [context] - Passed on to `friendlyError`.
+ */
+function renderLoadError(container, raw, retryFn, context) {
+  container.innerHTML = `<div class="notice error load-error">
+      <div class="notice-text">${friendlyError(raw, context)}</div>
+      <button class="retry-btn">נסו שוב</button>
+    </div>`;
+  container.querySelector('.retry-btn').addEventListener('click', retryFn);
+}
+
+// Server error texts this project produces, and what to tell the user instead. The first
+// matching row wins. `detail: true` also shows the original text in small print (useful when the
+// user asks for help); it is left out where the friendly sentence already says everything.
+const ERROR_TRANSLATIONS = [
+  { match: /כבר ברשימה|כבר מנוי/,                 text: 'ההסכת הזה כבר ברשימה שלכם.' },
+  { match: /נתמך רק קישור/,                        text: 'הכתובת צריכה להתחיל ב-http או https.' },
+  { match: /Drive מלא|storage/i,                   text: 'אין מספיק מקום בדרייב. פנו מקום ונסו שוב.' },
+  { match: /אין מנויים לייצוא/,                    text: 'עדיין אין הסכתים ברשימה, ולכן אין מה לגבות.' },
+  { match: /OPML לא תקין|לא נמצאו feeds|ניתוח OPML/, text: 'הקובץ שנבחר אינו קובץ גיבוי תקין של הסכתים.', detail: true },
+  { match: /הקובץ לא נמצא בתיקיית|קריאת הקובץ מהדרייב/, text: 'לא הצלחנו לקרוא את קובץ הגיבוי מהדרייב. נסו שוב.', detail: true },
+  { match: /HTTP \d{3}|RSS|הפיד/,                  text: 'לא הצלחנו לטעון את ההסכת כרגע. נסו שוב מאוחר יותר.', detail: true, feed: true }
+];
+
+/**
+ * Purpose: Turn a raw error into a Hebrew sentence that tells the user what happened and what
+ *   to do, instead of showing text such as "HTTP 404".
+ * Operation: Looks the error text up in `ERROR_TRANSLATIONS`; anything unknown becomes a generic
+ *   "something went wrong, try again" with the original text in small print. `context` adjusts
+ *   the wording where the same failure means something different to the user: 'search' for a
+ *   failed search, 'address' for a feed address the user pasted (so the advice is to check the
+ *   address rather than to wait).
+ * @param {*} raw - Error object or error string from the server.
+ * @param {string} [context] - 'search' | 'address' | undefined.
+ * @returns {string} - Safe HTML.
+ */
+function friendlyError(raw, context) {
+  const original = String((raw && raw.message) || raw || '').trim();
+  const row = ERROR_TRANSLATIONS.find(r => r.match.test(original));
+
+  let text = row ? row.text : 'משהו השתבש. נסו שוב.';
+  let showDetail = row ? !!row.detail : true;
+  if (context === 'search') {
+    text = 'החיפוש לא הצליח כרגע. נסו שוב בעוד רגע.';
+    showDetail = true;
+  } else if (context === 'address' && (!row || row.feed)) {
+    text = 'לא הצלחנו לטעון הסכת מהכתובת הזו. בדקו שהעתקתם את הכתובת המלאה ונסו שוב.';
+    showDetail = true;
+  }
+
+  const detailHtml = showDetail && original
+    ? `<div class="error-detail" dir="auto">${escHtml(original)}</div>`
+    : '';
+  return escHtml(text) + detailHtml;
+}
+
+// ══════════════════════════════════════════════════════════════
+// DESCRIPTIONS
+// ══════════════════════════════════════════════════════════════
+// Purpose: Show a podcast or episode description the way its author laid it out: at full length,
+//   with its paragraphs and line breaks, and with links that can be clicked. The markup that
+//   comes from the feed is never placed into the page as it is.
+// Operation: Feeds give descriptions either as plain text or as markup. `renderRichText` parses
+//   markup into a separate, inert document (nothing in it runs or loads) and rebuilds the content
+//   node by node from a short list of harmless pieces: paragraphs and other blocks become
+//   separate lines, a line-break element stays a line break, list items get a bullet, bold and
+//   italic are kept, and a link is kept only when it points to an http or https address.
+//   Scripts, styles, images, frames, form controls and all attributes are dropped. Plain text
+//   keeps the line breaks typed in it, and web addresses written out in the text become links.
+
+const RICH_TEXT_BLOCK_TAGS = ['p', 'div', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'blockquote', 'section', 'article', 'table', 'tr', 'pre'];
+const RICH_TEXT_SKIPPED_TAGS = ['script', 'style', 'iframe', 'object', 'embed', 'img', 'picture',
+  'video', 'audio', 'svg', 'head', 'title', 'noscript', 'template', 'form', 'input', 'button',
+  'select', 'textarea'];
+const RICH_TEXT_BOLD_TAGS = ['b', 'strong'];
+const RICH_TEXT_ITALIC_TAGS = ['i', 'em'];
+// Characters that end a sentence right after a web address and are not part of the address
+const ADDRESS_TRAILING_PUNCTUATION = '.,;:!?)]}';
+
+function renderRichText(target, raw) {
+  const text = String(raw || '').trim();
+  target.textContent = '';
+  target.setAttribute('dir', 'auto');
+
+  const isMarkup = /<\/?[a-z][^>]*>|&[a-z0-9#]+;/i.test(text);
+  if (!isMarkup) {
+    appendTextWithLinks(target, text, true, true);
+    return;
+  }
+  // Markup with no line-break elements of its own relies on the line breaks typed in the text
+  const keepNewlines = !/<(br|p|div|li|h[1-6]|blockquote|tr)\b/i.test(text);
+  const parsed = new DOMParser().parseFromString(text, 'text/html');
+  appendSafeNodes(target, parsed.body, keepNewlines, false);
+}
+
+function appendSafeNodes(target, source, keepNewlines, insideLink) {
+  source.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      appendTextWithLinks(target, node.textContent, keepNewlines, !insideLink);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = node.nodeName.toLowerCase();
+    if (RICH_TEXT_SKIPPED_TAGS.includes(tag)) return;
+    if (tag === 'br') {
+      target.appendChild(document.createElement('br'));
+      return;
+    }
+
+    // Elements that are not listed (span, font, u and so on) contribute only their content
+    let holder = target;
+    let isLink = false;
+    if (tag === 'a' && !insideLink) {
+      const link = makeSafeLink(node.getAttribute('href'));
+      if (link) {
+        holder = target.appendChild(link);
+        isLink = true;
+      }
+    } else if (RICH_TEXT_BLOCK_TAGS.includes(tag)) {
+      holder = target.appendChild(document.createElement('div'));
+      holder.className = tag === 'li' ? 'rt-block rt-item' : 'rt-block';
+      holder.setAttribute('dir', 'auto');
+    } else if (RICH_TEXT_BOLD_TAGS.includes(tag)) {
+      holder = target.appendChild(document.createElement('b'));
+    } else if (RICH_TEXT_ITALIC_TAGS.includes(tag)) {
+      holder = target.appendChild(document.createElement('i'));
+    }
+
+    appendSafeNodes(holder, node, keepNewlines, insideLink || isLink);
+    // A link with nothing readable inside (one that only wrapped an image) shows its address
+    if (isLink && !holder.textContent.trim()) holder.textContent = holder.getAttribute('href');
+  });
+}
+
+function appendTextWithLinks(target, text, keepNewlines, linkify) {
+  const lines = keepNewlines ? String(text).split('\n') : [String(text)];
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex > 0) target.appendChild(document.createElement('br'));
+    if (!linkify) {
+      target.appendChild(document.createTextNode(line));
+      return;
+    }
+    // Splitting on a captured group puts the web addresses at the odd positions
+    line.split(/(https?:\/\/[^\s<>]+)/i).forEach((part, partIndex) => {
+      if (partIndex % 2 === 0) {
+        if (part) target.appendChild(document.createTextNode(part));
+        return;
+      }
+      let address = part;
+      let trailing = '';
+      while (address && ADDRESS_TRAILING_PUNCTUATION.indexOf(address[address.length - 1]) !== -1) {
+        trailing = address[address.length - 1] + trailing;
+        address = address.slice(0, -1);
+      }
+      const link = makeSafeLink(address);
+      if (link) {
+        link.textContent = address;
+        target.appendChild(link);
+      } else {
+        target.appendChild(document.createTextNode(address));
+      }
+      if (trailing) target.appendChild(document.createTextNode(trailing));
+    });
+  });
+}
+
+// Returns a link element that opens in a new tab, or null when the address is not http or https
+function makeSafeLink(href) {
+  const address = String(href || '').trim();
+  if (!/^https?:/i.test(address)) return null;
+  const link = document.createElement('a');
+  link.setAttribute('href', address);
+  link.setAttribute('target', '_blank');
+  link.setAttribute('rel', 'noopener noreferrer');
+  return link;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1185,14 +1844,20 @@ function formatDisplayDate(dateStr) {
 // ══════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
 
-  // Header buttons
-  document.getElementById('btn-search-toggle').addEventListener('click', () => {
-    const bar = document.getElementById('search-bar');
-    bar.classList.toggle('visible');
-    if (bar.classList.contains('visible')) {
-      document.getElementById('search-input').focus();
-    }
+  // "More options" menu
+  const moreBtn  = document.getElementById('btn-more');
+  const moreMenu = document.getElementById('more-menu');
+  const closeMoreMenu = () => {
+    moreMenu.classList.remove('visible');
+    moreBtn.setAttribute('aria-expanded', 'false');
+  };
+  moreBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = moreMenu.classList.toggle('visible');
+    moreBtn.setAttribute('aria-expanded', String(open));
   });
+  document.addEventListener('click', closeMoreMenu);
+
   document.getElementById('btn-add-rss').addEventListener('click', openRssModal);
   document.getElementById('btn-import-opml').addEventListener('click', openImportModal);
   document.getElementById('btn-export-opml').addEventListener('click', doExport);
@@ -1204,14 +1869,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Back buttons
-  document.getElementById('btn-back-podcasts').addEventListener('click', () => {
-    showScreen('screen-podcasts');
-  });
+  document.getElementById('btn-back-episodes').addEventListener('click', closeEpisodeList);
   document.getElementById('btn-back-search').addEventListener('click', () => {
     loadPodcastList();
   });
 
-  // OPML modal
+  // RSS modal
   document.getElementById('rss-cancel').addEventListener('click', closeRssModal);
   document.getElementById('rss-confirm').addEventListener('click', doAddRss);
   document.getElementById('rss-modal').addEventListener('click', e => {
@@ -1221,13 +1884,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') doAddRss();
   });
 
+  // Restore-from-backup modal
   document.getElementById('opml-cancel').addEventListener('click', closeImportModal);
   document.getElementById('opml-confirm').addEventListener('click', doImport);
   document.getElementById('opml-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('opml-modal')) closeImportModal();
   });
-  
+
   document.getElementById('btn-import-drive').addEventListener('click', doImportFromDrive);
+
+  // Esc closes whatever is open on top: the menu and the two modals
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    closeMoreMenu();
+    closeRssModal();
+    closeImportModal();
+  });
 
   const sortSelect = document.getElementById('podcast-sort-select');
   if (sortSelect) {
@@ -1240,6 +1912,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initial load
   loadLastAutoRunLabel();
+  loadDriveFolderLink();
   loadPodcastList();
 });
 </script>

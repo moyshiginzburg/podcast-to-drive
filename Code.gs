@@ -58,6 +58,20 @@ const SOFT_STOP_MS = 4 * 60 * 1000;
 const RESUME_TRIGGER_DELAY_MS = 60 * 1000; // 1 minute (to prevent Google scheduler throttling)
 /** Extension given to an episode file when its real type cannot be determined. */
 const DEFAULT_FILE_EXTENSION = 'mp3';
+
+// Longest episode description stored on the Drive file: the limit Drive itself shows for a file
+// description (the counter in the file details panel reads "n/25,000").
+const MAX_DESCRIPTION_LENGTH = 25000;
+// A queued job is one JSON string in one sheet cell, and Google Sheets holds at most 50,000
+// characters in a cell.
+const QUEUE_CELL_MAX_CHARS = 50000;
+// Longest job written when an episode is queued. The rest of the cell stays free for what the
+// worker adds to the job later (upload session address, resume offset, retry counter).
+const QUEUE_JOB_MAX_CHARS = QUEUE_CELL_MAX_CHARS - 5000;
+// Length a description is cut to if Drive refuses the full one (the length used before the
+// full description was stored).
+const FALLBACK_DESCRIPTION_LENGTH = 800;
+
 /**
  * Purpose: The file types the downloader recognizes by name, and the MIME type each one is
  *   uploaded to Drive with. An RSS enclosure is not necessarily audio: feeds also publish video,
@@ -439,9 +453,20 @@ function saveSetting(key, value) {
   sheet.appendRow([key, value]);
 }
 
-/** Returns object with { list: array, sortMode: string } */
+/**
+ * Purpose: Give the management dialog everything it needs to draw the podcast list and to word
+ *   its "podcast added" message truthfully.
+ * Operation: Reads the saved sort preference and the active rows of the subscriptions sheet.
+ *   Also reports whether automatic downloading is on, taken from the `autoDownloadEnabled`
+ *   script property that `showSidebar` refreshes from the real triggers every time the dialog
+ *   opens – so this costs no trigger lookup and no extra call from the dialog. A missing
+ *   property counts as "on", the same assumption `onOpen` makes for a brand-new user.
+ * @returns {{ list: Array<Object>, sortMode: string, autoEnabled: boolean }}
+ */
 function getSubscriptionsList() {
   const sortMode = getSetting('podcastSortMode', 'default');
+  const autoEnabled =
+    PropertiesService.getScriptProperties().getProperty('autoDownloadEnabled') !== 'false';
 
   const list = getSubscriptionRows()
     .filter(row => row.status === STATUS_ACTIVE)
@@ -452,7 +477,7 @@ function getSubscriptionsList() {
       subscribeDate: row.subscribeDate || 0
     }));
 
-  return { list, sortMode };
+  return { list, sortMode, autoEnabled };
 }
 
 function savePodcastSortMode(mode) {
@@ -469,7 +494,7 @@ function addSubscription(rssUrl, title, imageUrl) {
   const existing = rows.find(row => row.url === url);
 
   if (existing && existing.status === STATUS_ACTIVE) {
-    return { success: false, message: 'כבר מנוי להסכת זה' };
+    return { success: false, message: 'ההסכת הזה כבר ברשימה שלכם' };
   }
 
   const values = [
@@ -704,7 +729,50 @@ function ensureDownloadQueueSheet() {
 
 function enqueueDownloadJob(payload) {
   const sheet = ensureDownloadQueueSheet();
-  sheet.appendRow([JSON.stringify(payload || {})]);
+  sheet.appendRow([serializeJobForQueue(payload)]);
+}
+
+/**
+ * Purpose: Turn a download job into the JSON string stored in its queue cell, guaranteed to fit
+ *   the cell, so a long episode description can never make queuing the episode fail.
+ * Operation: Serializes the job. A description of up to MAX_DESCRIPTION_LENGTH characters
+ *   normally fits with room to spare, but JSON writes every line break and quotation mark as
+ *   two characters, so an unusual text can come out much longer than it is. If the string is
+ *   longer than QUEUE_JOB_MAX_CHARS, the description (the only large field) is cut by the excess
+ *   and the job is serialized again, until it fits. The caller's object is not modified.
+ * @param {Object} payload - The job to queue.
+ * @returns {string} - JSON string of at most QUEUE_JOB_MAX_CHARS characters (as long as the
+ *   job fits without its description).
+ */
+function serializeJobForQueue(payload) {
+  const job = Object.assign({}, payload || {});
+  let json = JSON.stringify(job);
+  while (json.length > QUEUE_JOB_MAX_CHARS && job.description) {
+    const excess = json.length - QUEUE_JOB_MAX_CHARS;
+    job.description = truncateText(job.description, job.description.length - excess);
+    json = JSON.stringify(job);
+  }
+  return json;
+}
+
+/**
+ * Purpose: Cut a text to a maximum length in a way that still reads as deliberately cut.
+ * Operation: Returns the text unchanged when it fits. Otherwise keeps the first `maxLength - 1`
+ *   characters, drops a trailing half of a two-unit character (such as an emoji) so no broken
+ *   character is left behind, trims trailing spaces and appends "…". A maximum of zero or less
+ *   gives an empty string.
+ * @param {string} text - Text to cut.
+ * @param {number} maxLength - Maximum length of the result, in characters.
+ * @returns {string}
+ */
+function truncateText(text, maxLength) {
+  const full = String(text || '');
+  if (full.length <= maxLength) return full;
+  if (maxLength <= 0) return '';
+  let kept = full.slice(0, maxLength - 1);
+  const lastCode = kept.charCodeAt(kept.length - 1);
+  if (lastCode >= 0xD800 && lastCode <= 0xDBFF) kept = kept.slice(0, -1);
+  return kept.trim() + '…';
 }
 
 function getDownloadQueueLength() {
@@ -938,6 +1006,18 @@ function syncDownloadedFlagWithDrive(url, podcastTitle, episodeTitle, pubDate, d
 function getRootFolder() {
   const it = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
   return it.hasNext() ? it.next() : DriveApp.createFolder(ROOT_FOLDER_NAME);
+}
+
+/**
+ * Purpose: Let the management dialog offer a direct "open my podcasts folder in Drive" link, so
+ *   users can reach their downloaded files without searching Drive for the folder.
+ * Operation: Resolves the root podcasts folder through `getRootFolder` (which creates it when it
+ *   does not exist yet) and returns its Drive URL. The dialog calls this once when it opens, in
+ *   a request of its own, so the Drive lookup never delays the podcast list.
+ * @returns {string} - Drive URL of the root podcasts folder.
+ */
+function getPodcastsFolderUrl() {
+  return getRootFolder().getUrl();
 }
 
 function getPodcastFolder(podcastTitle) {
@@ -1218,7 +1298,8 @@ function getHeaderCaseInsensitive(headers, key) {
  * @param {string} fileName     - Target filename in Drive (including extension).
  * @param {string} mimeType     - MIME type of the file (e.g. 'audio/mpeg').
  * @param {string} folderId     - Google Drive folder ID where the file will be created.
- * @param {string} description  - Optional file description.
+ * @param {string} description  - Optional file description. If Drive refuses the request with
+ *   a long description, the session is requested once more with the description cut short.
  * @returns {string}            - Session URL to use for subsequent chunk uploads.
  */
 function createResumableUploadSession(fileName, mimeType, folderId, description) {
@@ -1226,9 +1307,48 @@ function createResumableUploadSession(fileName, mimeType, folderId, description)
   const metadata = { name: fileName, mimeType, parents: [folderId] };
   if (description) metadata.description = description;
 
-  let resp;
+  let resp = requestResumableUploadSession(token, mimeType, metadata);
+  let code = resp.getResponseCode();
+
+  // The description is already within the limit Drive shows in its own interface. That limit is
+  // not in the API documentation, though, so should Drive refuse the request anyway, try once
+  // more with a short description: an episode must never fail to download because of its notes.
+  if ((code === 400 || code === 413) && description && description.length > FALLBACK_DESCRIPTION_LENGTH) {
+    console.warn(
+      'createResumableUploadSession: Drive refused the request (HTTP ' + code + ') with a ' +
+      description.length + '-character description; retrying with a short one. ' +
+      String(resp.getContentText() || '').slice(0, 200)
+    );
+    metadata.description = truncateText(description, FALLBACK_DESCRIPTION_LENGTH);
+    resp = requestResumableUploadSession(token, mimeType, metadata);
+    code = resp.getResponseCode();
+  }
+
+  if (code !== 200) {
+    throw buildDriveHttpError(code, resp.getContentText(), 'יצירת סשן העלאה נכשלה');
+  }
+
+  const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
+  if (!location) {
+    throw new Error('שרת Drive לא החזיר Location header עבור סשן ההעלאה');
+  }
+  return location;
+}
+
+/**
+ * Purpose: Send the single request that opens a Drive resumable upload session.
+ * Operation: POSTs the file metadata to the Drive API v3 resumable upload endpoint and returns
+ *   the raw response for `createResumableUploadSession` to interpret. A request that never got
+ *   an answer (DNS, timeout, ...) is rethrown flagged `isNetworkRetryable`, so the worker tries
+ *   the episode again shortly.
+ * @param {string} token    - OAuth token.
+ * @param {string} mimeType - MIME type of the file that will be uploaded.
+ * @param {Object} metadata - Drive file metadata (name, mimeType, parents, description).
+ * @returns {HTTPResponse}
+ */
+function requestResumableUploadSession(token, mimeType, metadata) {
   try {
-    resp = UrlFetchApp.fetch(
+    return UrlFetchApp.fetch(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
       {
         method: 'post',
@@ -1247,17 +1367,6 @@ function createResumableUploadSession(fileName, mimeType, folderId, description)
     err.isNetworkRetryable = true;
     throw err;
   }
-
-  const code = resp.getResponseCode();
-  if (code !== 200) {
-    throw buildDriveHttpError(code, resp.getContentText(), 'יצירת סשן העלאה נכשלה');
-  }
-
-  const location = getHeaderCaseInsensitive(resp.getHeaders(), 'Location');
-  if (!location) {
-    throw new Error('שרת Drive לא החזיר Location header עבור סשן ההעלאה');
-  }
-  return location;
 }
 
 /**
@@ -1764,8 +1873,14 @@ function parseTotalSizeFromContentRange(headers) {
  * If subscriptionDateMs is provided, this stops early on the first item whose pubDate is
  * older than or equal to the subscription date (assumes feed items are newest-first).
  * episodes: { title, date, description, url }
+ * `description` is the plain-text form made by `descriptionToPlainText` (line breaks kept, links
+ * written out, at most MAX_DESCRIPTION_LENGTH characters); it is what gets stored on the queued
+ * job and on the Drive file. When `options.includeFullDescription` is true every episode also
+ * gets `descriptionHtml`: the description exactly as the feed gives it, with its markup, for
+ * display in the management dialog. It is opt-in so the automatic scan does not carry it around.
  */
-function parseRSS(xmlUrl, runT0, subscriptionDateMs) {
+function parseRSS(xmlUrl, runT0, subscriptionDateMs, options) {
+  const includeFullDescription = !!(options && options.includeFullDescription);
   debugStep('parseRSS: UrlFetch start', debugSnippet(xmlUrl, 200), runT0);
   const resp = UrlFetchApp.fetch(xmlUrl, { followRedirects: true, muteHttpExceptions: true });
   debugStep('parseRSS: UrlFetch done', 'HTTP ' + resp.getResponseCode(), runT0);
@@ -1818,22 +1933,102 @@ function parseRSS(xmlUrl, runT0, subscriptionDateMs) {
     if (!url) continue;
 
     let description = '';
+    let descriptionHtml = '';
     try {
       const descEl = item.getChild('description');
-      description = descEl ? descEl.getValue() : '';
-      description = description.replace(/<[^>]*>/g, '').trim().slice(0, 800);
+      descriptionHtml = descEl ? descEl.getValue().trim() : '';
+      description = descriptionToPlainText(descriptionHtml);
     } catch (_) { /* ignore */ }
 
-    episodes.push({
+    const episode = {
       title: (item.getChildText('title') || 'ללא שם').trim(),
       date: dateText,
       description,
       url
-    });
+    };
+    if (includeFullDescription) episode.descriptionHtml = descriptionHtml;
+    episodes.push(episode);
   }
 
   debugStep('parseRSS: items', String(episodes.length) + ' episodes', runT0);
   return { title: podcastTitle, imageUrl, episodes };
+}
+
+/**
+ * Purpose: Turn an episode description from a feed (plain text or HTML) into readable plain
+ *   text, for places that cannot show markup: the description of the file in Drive and the
+ *   queued download job.
+ * Operation: Works on the text with a fixed sequence of replacements:
+ *   1. Scripts and style sheets are removed together with their content.
+ *   2. If the text has line-break markup of its own (paragraphs, <br>, list items...), the line
+ *      breaks typed in the source are only formatting of the markup and are collapsed to spaces.
+ *      Text without such markup keeps its typed line breaks.
+ *   3. A link becomes its text followed by the address in brackets – "text (https://...)" – or
+ *      just the address when the two are the same; only http/https addresses are written out.
+ *   4. <br> becomes a line break, a list item starts a new line with a bullet, the end of a
+ *      paragraph leaves an empty line, and the end of any other block ends the line. (The end
+ *      of a list item adds nothing: the next item or the end of the list already breaks the line.)
+ *   5. All remaining tags are removed and the common character entities are decoded.
+ *   6. Spaces at line ends are trimmed, more than one empty line in a row is reduced to one, and
+ *      the result is cut to MAX_DESCRIPTION_LENGTH characters (ending with "…" when cut).
+ * @param {string} html - Description as the feed gives it.
+ * @returns {string} - Plain text.
+ */
+function descriptionToPlainText(html) {
+  let text = String(html || '');
+
+  text = text.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, '');
+
+  if (/<(br|p|div|li|h[1-6]|blockquote|tr)\b/i.test(text)) {
+    text = text.replace(/\s+/g, ' ');
+  }
+
+  text = text.replace(/<a\b[^>]*?href\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a\s*>/gi, (match, quote, href, label) => {
+    const linkText = label.replace(/<[^>]*>/g, '').trim();
+    const address = href.trim();
+    if (!/^https?:/i.test(address)) return linkText;
+    if (!linkText || linkText === address) return address;
+    return linkText + ' (' + address + ')';
+  });
+
+  text = text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '\n• ')
+    .replace(/<\/p\s*>/gi, '\n\n')
+    .replace(/<\/(div|h[1-6]|ul|ol|tr|blockquote|section|article|pre)\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '');
+
+  text = text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&(#39|apos);/gi, "'")
+    .replace(/&#(\d+);/g, (match, digits) => decodeNumericEntity(match, parseInt(digits, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => decodeNumericEntity(match, parseInt(hex, 16)))
+    .replace(/&amp;/gi, '&');
+
+  text = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n').map(line => line.trim()).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return truncateText(text, MAX_DESCRIPTION_LENGTH);
+}
+
+/**
+ * Purpose: Decode one numeric character entity (such as "&#1513;") without ever throwing, so a
+ *   malformed entity in a feed cannot fail the handling of the episode it belongs to.
+ * Operation: Returns the character for a valid code point. A number that is not a valid code
+ *   point (zero, or above the Unicode range) leaves the entity text as it was written.
+ * @param {string} entity - The entity as written in the text.
+ * @param {number} codePoint - The number the entity holds.
+ * @returns {string}
+ */
+function decodeNumericEntity(entity, codePoint) {
+  if (!(codePoint > 0 && codePoint <= 0x10FFFF)) return entity;
+  return String.fromCodePoint(codePoint);
 }
 
 function sanitizeXmlForParsing(xmlText) {
@@ -1875,11 +2070,45 @@ function fetchPodcastInfo(rssUrl) {
   }
 }
 
-/** Returns episode list for a given RSS URL */
+/**
+ * Purpose: Return a podcast's episode list for the management dialog, with each episode marked
+ *   as already downloaded and/or currently waiting in the download queue, so the dialog can show
+ *   that up front instead of the user finding out only after clicking "download".
+ * Operation: Parses the feed with `parseRSS`, then reads the downloads sheet and the queue sheet
+ *   once each and adds two booleans to every episode: `downloaded` and `queued`. No Drive call is
+ *   made: `downloaded` means "was downloaded at some point", not "the file is still in Drive" –
+ *   that check stays on the manual download click (`syncDownloadedFlagWithDrive`), where it costs
+ *   one lookup instead of one per listed episode. If the two sheets cannot be read, the episodes
+ *   are returned without flags rather than failing the whole list. For descriptions the dialog
+ *   gets `descriptionHtml` (the description as the feed gives it, which it displays) and a
+ *   `hasDescription` flag; the plain-text `description` is left out so that each description
+ *   travels once. On a manual download the dialog sends `descriptionHtml` back and
+ *   `downloadEpisode` converts it to plain text itself.
+ * @param {string} rssUrl - Feed URL of the podcast.
+ * @returns {{ success: boolean, title?: string, imageUrl?: string, episodes?: Array<Object>,
+ *             error?: string }}
+ */
 function fetchEpisodeList(rssUrl) {
   try {
-    const data = parseRSS(rssUrl);
-    return { success: true, title: data.title, imageUrl: data.imageUrl, episodes: data.episodes };
+    const data = parseRSS(rssUrl, undefined, undefined, { includeFullDescription: true });
+    let episodes = data.episodes.map(ep => ({
+      title: ep.title,
+      date: ep.date,
+      url: ep.url,
+      descriptionHtml: ep.descriptionHtml,
+      hasDescription: !!ep.description
+    }));
+    try {
+      const downloadedUrls = getDownloadedSet();
+      const queuedUrls = getQueuedEpisodeUrls();
+      episodes = episodes.map(ep => Object.assign({}, ep, {
+        downloaded: downloadedUrls.has(ep.url),
+        queued: queuedUrls.has(ep.url)
+      }));
+    } catch (flagError) {
+      console.warn('fetchEpisodeList: could not read download status: ' + flagError.message);
+    }
+    return { success: true, title: data.title, imageUrl: data.imageUrl, episodes: episodes };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -1893,7 +2122,9 @@ function fetchEpisodeList(rssUrl) {
  *   download with soft-stop and cross-run resume, exactly like automatic downloads.
  *   Returns { success: true, queued: true } so the sidebar can show a "queued" state without
  *   blocking the UI thread waiting for the download to finish.
- * @param {Object} episodeData - { url, title, date, description, podcastTitle }
+ * @param {Object} episodeData - { url, title, date, descriptionHtml, podcastTitle }.
+ *   `descriptionHtml` is the description as the feed gives it; it is converted here with
+ *   `descriptionToPlainText` before it is stored on the job (and later on the Drive file).
  * @returns {{ success: boolean, queued?: boolean, alreadyQueued?: boolean,
  *             alreadyDownloaded?: boolean, error?: string, driveFull?: boolean }}
  */
@@ -1939,7 +2170,7 @@ function downloadEpisode(episodeData) {
       episodeUrl:   episodeData.url,
       episodeTitle: episodeData.title || 'פרק',
       pubDate:      pubDate.toISOString(),
-      description:  episodeData.description || '',
+      description:  descriptionToPlainText(episodeData.descriptionHtml),
       manualDownload: true
     });
 
